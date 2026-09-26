@@ -129,15 +129,18 @@ check "忽略原始触屏的 udev 规则已装" test -f /etc/udev/rules.d/71-sur
 
 # 打过"粘滞极大值"补丁的 iptsd（修单指划动断触，见 docs/08、setup/03）。
 # 没装只是警告：系统包原版照样能用，只是划动会断。
-# ★ 看的是【正在跑的进程】的可执行文件，不是 drop-in 在不在 —— drop-in 装了
+# ★ 看的是【正在跑的进程】的命令行，不是 drop-in 在不在 —— drop-in 装了
 #   但没 daemon-reload / restart，跑的仍是原版，只查文件会误报绿。
+# ★ 读 cmdline 不读 /proc/PID/exe：iptsd 以 root 跑，普通用户 readlink 它的 exe
+#   会被拒（返回空），而 cmdline 谁都能读。
 PATCHED_DROPIN=/etc/systemd/system/iptsd@.service.d/10-patched.conf
-running="$(readlink -f "/proc/$(pgrep -x iptsd | head -1)/exe" 2>/dev/null)"
+ipid="$(systemctl show iptsd@dev-hidraw1 -p MainPID --value 2>/dev/null)"
+running="$(tr '\0' ' ' < "/proc/${ipid:-0}/cmdline" 2>/dev/null | awk '{print $1}')"
 if [ "$running" = /usr/local/bin/iptsd ]; then
     ok "iptsd 跑的是补丁版（/usr/local/bin/iptsd）"
     # 补丁是对着某个版本做的。pacman 把系统包升级了而补丁版没重编，
     # 就是新配置 + 旧程序，行为说不清 —— 提醒重跑 setup/03。
-    pkgver="$(pacman -Q iptsd 2>/dev/null | awk {print } | cut -d- -f1)"
+    pkgver="$(pacman -Q iptsd 2>/dev/null | awk '{print $2}' | cut -d- -f1)"
     [ "$pkgver" = "3.1.0" ] || warn "  └ 系统包 iptsd 已是 $pkgver，补丁版还是 3.1.0 → 重跑 ./setup/03-iptsd-patched.sh"
 elif [ -f "$PATCHED_DROPIN" ]; then
     bad "补丁版 drop-in 已装但跑的还是 ${running:-?} → sudo systemctl daemon-reload && sudo systemctl restart iptsd@dev-hidraw1"
