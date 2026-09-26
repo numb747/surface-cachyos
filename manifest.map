@@ -46,6 +46,8 @@ bin/hypr-screenrec                        ~/.local/bin/hypr-screenrec
 #   那是 doctor 只查存在性造成的，本仓的 doctor 比对内容。
 tablet/tablet-mode                        ~/.local/bin/tablet-mode
 tablet/tablet-rescue                      ~/.local/bin/tablet-rescue
+# 平板操作速查页，Firefox 收藏这个路径。改了手势/键位要同步改它。
+docs/cheatsheet.html                      ~/.local/share/surface-cachyos/cheatsheet.html
 
 #@module osk
 # 虚拟键盘的信号封装。wvkbd 用 SIGUSR1/2/SIGRTMIN 控制显隐，这里包成

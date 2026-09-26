@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>平板操作速查</title>
+<!--
+  Surface Pro 6 平板操作速查。
+  源文件：surface-cachyos/docs/cheatsheet.html，由 ./install.sh tablet 装到
+  ~/.local/share/surface-cachyos/cheatsheet.html（Firefox 收藏的是那个路径）。
+  改了手势或键位（touch.lua / touch-tablet.lua / mykeys.lua）要同步改这里。
+-->
+<style>
+  :root {
+    --bg: #f4f5f8; --card: #ffffff; --text: #1d2130; --muted: #5e6475;
+    --line: #e1e4ec; --accent: #3f5bd9; --warn-bg: #fff4e0; --warn: #8a5a00;
+    --key-bg: #eef0f6; --key-edge: #c5cad8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151822; --card: #1f2330; --text: #e6e8ef; --muted: #9aa1b5;
+      --line: #2e3345; --accent: #8fa2ff; --warn-bg: #3a2e17; --warn: #f2c46d;
+      --key-bg: #2b3043; --key-edge: #454c66;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151822; --card: #1f2330; --text: #e6e8ef; --muted: #9aa1b5;
+    --line: #2e3345; --accent: #8fa2ff; --warn-bg: #3a2e17; --warn: #f2c46d;
+    --key-bg: #2b3043; --key-edge: #454c66;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 19px/1.55 "Noto Sans CJK SC", "Noto Sans SC", system-ui, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 30px; margin: 4px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  nav { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
+  nav a {
+    color: var(--accent); text-decoration: none; padding: 10px 16px;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--card);
+  }
+  section {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 20px; margin-bottom: 18px;
+  }
+  h2 { font-size: 23px; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 12px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+  tr:first-child td { border-top: 0; }
+  td:first-child { width: 44%; font-weight: 600; }
+  .tag {
+    display: inline-block; font-size: 14px; font-weight: 500; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-left: 6px;
+    vertical-align: 2px;
+  }
+  kbd {
+    display: inline-block; min-width: 1.9em; text-align: center; font: 600 17px/1.2 system-ui, sans-serif;
+    padding: 5px 9px; border-radius: 7px; background: var(--key-bg);
+    border: 1px solid var(--key-edge); border-bottom-width: 3px; margin: 1px 0;
+  }
+  .plus { color: var(--muted); margin: 0 4px; }
+  .steps { margin: 0; padding-left: 1.3em; }
+  .steps li { margin: 6px 0; }
+  .warn {
+    background: var(--warn-bg); color: var(--warn); border-radius: 10px;
+    padding: 12px 14px; margin: 12px 0 0;
+  }
+  .warn b { color: inherit; }
+  .muted { color: var(--muted); }
+  p { margin: 8px 0; }
+  footer { color: var(--muted); font-size: 15px; text-align: center; margin-top: 26px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>平板操作速查</h1>
+  <p class="sub">Surface Pro 6 · Hyprland · 摘掉 Type Cover 时用</p>
+
+  <nav>
+    <a href="#tasks">常见操作</a>
+    <a href="#gestures">手势</a>
+    <a href="#osk">虚拟键盘键位</a>
+    <a href="#trouble">出问题时</a>
+  </nav>
+
+  <section id="tasks">
+    <h2>常见操作</h2>
+    <table>
+      <tr><td>打开应用 / 找窗口</td><td>三指点击 → 启动器，输入名字搜索</td></tr>
+      <tr><td>关掉当前应用</td><td><kbd>Alt</kbd><span class="plus">+</span><kbd>W</kbd></td></tr>
+      <tr><td>新建桌面</td><td><kbd>Alt</kbd><span class="plus">+</span><kbd>T</kbd></td></tr>
+      <tr><td>切换桌面</td><td>点顶栏中间的工作区圆点</td></tr>
+      <tr><td>全屏 / 退出全屏</td><td>四指点击，或 <kbd>Alt</kbd><span class="plus">+</span><kbd>Enter</kbd></td></tr>
+      <tr><td>移动窗口</td><td>三指按住不动，等窗口跟手后再拖</td></tr>
+      <tr><td>切到 PC 模式</td><td>五指长按，或 <kbd>Alt</kbd><span class="plus">+</span><kbd>M</kbd></td></tr>
+      <tr><td>切到平板模式</td><td>拔掉 Type Cover，或 <kbd>Alt</kbd><span class="plus">+</span><kbd>M</kbd></td></tr>
+      <tr><td>打字</td><td>点输入框会自动弹键盘；没弹就从屏幕底边往下划</td></tr>
+      <tr><td>音量 / Wi-Fi / 亮度</td><td>四指长按 → 控制中心；音量也可用侧边实体键</td></tr>
+      <tr><td>复制过的内容</td><td>五指点击 → 剪贴板历史</td></tr>
+    </table>
+  </section>
+
+  <section id="gestures">
+    <h2>手势</h2>
+    <table>
+      <tr><td>三指点击</td><td>启动器（应用 + 窗口搜索）</td></tr>
+      <tr><td>三指长按</td><td>拖动窗口</td></tr>
+      <tr><td>四指点击</td><td>切换全屏</td></tr>
+      <tr><td>四指长按</td><td>控制中心</td></tr>
+      <tr><td>五指点击</td><td>剪贴板历史</td></tr>
+      <tr><td>底部边缘下滑</td><td>显示 / 隐藏虚拟键盘</td></tr>
+      <tr><td>双指长按<span class="tag">仅平板</span></td><td>救援：界面乱了、屏幕空了时复位</td></tr>
+      <tr><td>五指长按<span class="tag">仅平板</span></td><td>退出平板模式</td></tr>
+    </table>
+    <p class="muted">长按 = 按住约半秒不动。只有点击和长按，没有滑动手势。</p>
+  </section>
+
+  <section id="osk">
+    <h2>虚拟键盘键位</h2>
+    <ol class="steps">
+      <li>从屏幕底边往下划，呼出键盘</li>
+      <li>点一下 <kbd>Alt</kbd>（会保持按下状态）</li>
+      <li>再点字母，键盘自动收起</li>
+    </ol>
+    <table style="margin-top:12px">
+      <tr><td><kbd>Alt</kbd><span class="plus">+</span><kbd>W</kbd></td><td>关闭窗口</td></tr>
+      <tr><td><kbd>Alt</kbd><span class="plus">+</span><kbd>T</kbd></td><td>新建桌面（空工作区）</td></tr>
+      <tr><td><kbd>Alt</kbd><span class="plus">+</span><kbd>Enter</kbd></td><td>切换全屏</td></tr>
+      <tr><td><kbd>Alt</kbd><span class="plus">+</span><kbd>M</kbd></td><td>切换平板 / PC 模式</td></tr>
+    </table>
+    <p class="warn"><b>点了没反应？</b>先看键盘上的 <kbd>Caps</kbd> 是不是亮着 —— 大写锁定开着时快捷键全部失效。</p>
+    <p class="muted" style="margin-top:12px">键盘左下角的 ⌨ 是切换布局，不是收起。接着 Type Cover 时这些键直接按。</p>
+  </section>
+
+  <section id="trouble">
+    <h2>出问题时</h2>
+    <table>
+      <tr><td>屏幕只剩壁纸 / 窗口"不见了"</td><td>双指长按（救援）</td></tr>
+      <tr><td>划动写字时断断续续</td><td>屏幕上有两条竖直的死线（竖屏时左起约 4 cm、8 cm 处），横着穿过会断。上下滚动不受影响</td></tr>
+      <tr><td>Firefox 顶部冒出菜单栏</td><td>点一下页面别处即可消失</td></tr>
+      <tr><td>模式不对（有键盘却是平板）</td><td><kbd>Alt</kbd><span class="plus">+</span><kbd>M</kbd> 或五指长按</td></tr>
+    </table>
+  </section>
+
+  <footer>改了手势或键位要同步更新本页 · surface-cachyos/docs/cheatsheet.html</footer>
+</main>
+</body>
+</html>
