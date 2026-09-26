@@ -89,7 +89,7 @@ if [ $VERIFY -eq 1 ]; then
     head_ "用录像离线对比（不碰系统）"
     DUMP="${DUMP:-$HOME/touch-test/baseline.bin}"
     if [ ! -f "$DUMP" ]; then
-        warn "没有录像 $DUMP，跳过。录一份：sudo timeout -s INT 30 iptsd-dump /dev/hidraw1"
+        warn "没有录像 $DUMP，跳过。录一份：sudo timeout -s INT 30 iptsd-dump /dev/\$(grep -l \"^HID_NAME=IPTS \" /sys/class/hidraw/*/device/uevent | cut -d/ -f5)"
     else
         # 与守护进程一样的配置级联：设备配置（去掉 [Device] 匹配段）+ /etc/iptsd.conf
         # + 本仓的 iptsd.d 补充 —— 这样回放结果才等于装好之后的实际效果
@@ -122,13 +122,13 @@ cat <<EOS
       sudo install -Dm644 ~/surface-cachyos/systemd/iptsd@.service.d/10-patched.conf \\
            /etc/systemd/system/iptsd@.service.d/10-patched.conf
       sudo systemctl daemon-reload
-      sudo systemctl restart 'iptsd@dev-hidraw1.service'
+      sudo systemctl restart 'iptsd@*.service'
 
   验证：
-      systemctl show 'iptsd@dev-hidraw1' -p ExecStart | grep -o /usr/local/bin/iptsd
+      systemctl show 'iptsd@*' -p ExecStart | grep -o /usr/local/bin/iptsd
 
   回滚（回到系统包的原版）：
       sudo rm /etc/systemd/system/iptsd@.service.d/10-patched.conf
       # /etc/iptsd.d/10-surface-cachyos.conf 对原版没有影响，留着也行
-      sudo systemctl daemon-reload && sudo systemctl restart 'iptsd@dev-hidraw1.service'
+      sudo systemctl daemon-reload && sudo systemctl restart 'iptsd@*.service'
 EOS

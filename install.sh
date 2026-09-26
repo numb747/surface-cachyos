@@ -202,7 +202,7 @@ mod_system() {
        sudo install -Dm644 ~/surface-cachyos/systemd/iptsd@.service.d/override.conf \
             /etc/systemd/system/iptsd@.service.d/override.conf
        sudo systemctl daemon-reload
-       sudo systemctl restart 'iptsd@dev-hidraw1.service'
+       sudo systemctl restart 'iptsd@*.service'    # hidraw 编号会变，用通配
 
   2b) iptsd 补丁版（修单指划动断触；先编译，编完它会打印安装命令）
        ~/surface-cachyos/setup/03-iptsd-patched.sh           # 不需要 sudo

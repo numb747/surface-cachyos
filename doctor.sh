@@ -83,8 +83,19 @@ head_ "触屏链路"
 # iptsd 进程活着 ≠ 它在干活。旧仓踩过：进程在、设备在，但一个事件都不产出
 # （iptsd 3.1.0 的阻塞 read() 被信号打断后挂住）。所以查两件事：
 # 进程在不在、以及触摸设备有没有真的被识别出来。
+#
+# ★ 服务实例名不能写死 iptsd@dev-hidraw1：hidraw 编号按枚举顺序分配，
+#   冷启动后触屏可能变成 hidraw0（2026-09-27 强制关机后就是这样，
+#   另一个 hidraw 给了 hid-ishtp 传感器集线器）。按 HID_NAME 找真正的触屏节点。
+IPTS_HID=""
+for h in /sys/class/hidraw/hidraw*; do
+    grep -q '^HID_NAME=IPTS ' "$h/device/uevent" 2>/dev/null && { IPTS_HID="$(basename "$h")"; break; }
+done
+IPTSD_UNIT="iptsd@dev-${IPTS_HID:-hidraw1}.service"
+[ -n "$IPTS_HID" ] && inf "触屏 hidraw 节点：/dev/$IPTS_HID（服务 $IPTSD_UNIT）"
+
 if pgrep -x iptsd >/dev/null 2>&1; then ok "iptsd 在跑"
-else bad "iptsd 没跑 → sudo systemctl restart 'iptsd@dev-hidraw1'"; fi
+else bad "iptsd 没跑 → sudo systemctl restart '$IPTSD_UNIT'"; fi
 
 EV="$(grep -l 'IPTSD Virtual Touchscreen' /sys/class/input/event*/device/name 2>/dev/null \
       | sed -E 's|.*/(event[0-9]+)/.*|\1|' | head -1)"
@@ -134,7 +145,7 @@ check "忽略原始触屏的 udev 规则已装" test -f /etc/udev/rules.d/71-sur
 # ★ 读 cmdline 不读 /proc/PID/exe：iptsd 以 root 跑，普通用户 readlink 它的 exe
 #   会被拒（返回空），而 cmdline 谁都能读。
 PATCHED_DROPIN=/etc/systemd/system/iptsd@.service.d/10-patched.conf
-ipid="$(systemctl show iptsd@dev-hidraw1 -p MainPID --value 2>/dev/null)"
+ipid="$(systemctl show "$IPTSD_UNIT" -p MainPID --value 2>/dev/null)"
 running="$(tr '\0' ' ' < "/proc/${ipid:-0}/cmdline" 2>/dev/null | awk '{print $1}')"
 if [ "$running" = /usr/local/bin/iptsd ]; then
     ok "iptsd 跑的是补丁版（/usr/local/bin/iptsd）"
@@ -143,7 +154,7 @@ if [ "$running" = /usr/local/bin/iptsd ]; then
     pkgver="$(pacman -Q iptsd 2>/dev/null | awk '{print $2}' | cut -d- -f1)"
     [ "$pkgver" = "3.1.0" ] || warn "  └ 系统包 iptsd 已是 $pkgver，补丁版还是 3.1.0 → 重跑 ./setup/03-iptsd-patched.sh"
 elif [ -f "$PATCHED_DROPIN" ]; then
-    bad "补丁版 drop-in 已装但跑的还是 ${running:-?} → sudo systemctl daemon-reload && sudo systemctl restart iptsd@dev-hidraw1"
+    bad "补丁版 drop-in 已装但跑的还是 ${running:-?} → sudo systemctl daemon-reload && sudo systemctl restart '$IPTSD_UNIT'"
 else
     warn "iptsd 跑的是系统包原版 → 单指划动会断；修：./setup/03-iptsd-patched.sh"
 fi
