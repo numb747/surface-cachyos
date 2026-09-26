@@ -94,7 +94,7 @@ hl.bind("ALT + Space",   hl.dsp.exec_cmd(noctCall .. "panel-toggle launcher"))
 hl.bind("ALT + C",       hl.dsp.exec_cmd(noctCall .. "panel-toggle control-center"))
 hl.bind("ALT + N",       hl.dsp.exec_cmd(noctCall .. "panel-toggle control-center notifications"))
 hl.bind("ALT + V",       hl.dsp.exec_cmd(noctCall .. "panel-toggle clipboard"))
-hl.bind("ALT + W",       hl.dsp.exec_cmd(noctCall .. "panel-toggle wallpaper"))
+-- 壁纸面板原来在 ALT + W，让给了 §6 的关窗口；壁纸仍有 binds.lua 的 SUPER + SHIFT + W
 hl.bind("ALT + S",       hl.dsp.exec_cmd(noctCall .. "settings-toggle"))
 hl.bind("ALT + L",       hl.dsp.exec_cmd(noctCall .. "session lock"))
 hl.bind("ALT + Q",       hl.dsp.exec_cmd(noctCall .. "panel-toggle session"))
@@ -125,3 +125,46 @@ hl.bind("SUPER + K", hl.dsp.exec_cmd("/usr/local/bin/wvkbd-toggle"))
 --     这里给键盘用户一个等价入口；触屏用户走双指长按（config/touch-tablet.lua）。
 -- ────────────────────────────────────────────────────────────────────────────
 hl.bind("SUPER + SHIFT + Escape", hl.dsp.exec_cmd("/usr/local/bin/tablet-rescue"))
+
+
+-- ────────────────────────────────────────────────────────────────────────────
+--  6. PC 习惯键位（从 PC 版 mykeys.lua 移植），平板上用虚拟键盘按
+--
+--     ALT + W       关窗口
+--     ALT + T       跳到一个空工作区（= 新桌面）
+--     ALT + Return  切换全屏
+--     ALT + M       切换平板 / PC 模式
+--
+--     ★ 平板上怎么按：底部边缘下滑呼出 wvkbd → 点 Alt → 点 W。
+--       wvkbd 的 Ctr/Sup/Alt 是【粘滞键】（点一下锁住，作用于下一个键），
+--       不用两指同按。2026-09-27 实测：wvkbd 发出的组合键会被 Hyprland 的
+--       bind 接住，不会漏给应用。
+--
+--     ★ 每个动作之后顺手 hide 虚拟键盘 —— wvkbd 自己没有"收起"键
+--       （左下角 ⌨ 是切布局），按完不收的话键盘一直占着 30% 屏幕。
+--       键盘没开时 hide 什么都不做，接着 Type Cover 用也无副作用。
+--
+--     ★ 关窗口不违反"触屏不绑破坏性动作"（CLAUDE.md 硬约束 #2）：
+--       那条防的是手势误触；这里要连点两个指定的键，误触概率可以忽略。
+--
+--     ⚠ wvkbd 的 Caps 开着时这些键位全部不响应（实测，连 uinput 模拟的
+--       物理键盘也一样）。"点了没反应"先看 Caps。
+--     ⚠ 带菜单栏的应用会把粘滞 Alt 读成"单按 Alt"而弹出菜单栏。Firefox 已用
+--       user.js 的 ui.key.menuAccessKeyFocuses = false 关掉，见 docs/06。
+--
+--     ALT + T 用的是 PC 版里注释掉的那个简单写法（emptym），不带双平面抽屉架。
+--     旧版 ALT + Return 盖住状态栏（真全屏），这里保持一致；想保留状态栏用 mode = 1。
+-- ────────────────────────────────────────────────────────────────────────────
+local oskHide = hl.dsp.exec_cmd("/usr/local/bin/wvkbd-toggle hide")
+
+local function thenHideOsk(action)
+    return function()
+        hl.dispatch(action)
+        hl.dispatch(oskHide)
+    end
+end
+
+hl.bind("ALT + W",      thenHideOsk(hl.dsp.window.close()))
+hl.bind("ALT + T",      thenHideOsk(hl.dsp.focus({ workspace = "emptym" })))
+hl.bind("ALT + Return", thenHideOsk(hl.dsp.window.fullscreen()))
+hl.bind("ALT + M",      thenHideOsk(hl.dsp.exec_cmd("/usr/local/bin/tablet-mode toggle")))

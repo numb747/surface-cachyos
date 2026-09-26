@@ -73,6 +73,10 @@ charlen@192.168.0.8:~/surface-cachyos
 误触的代价（丢工作、窗口找不回、空工作区盖住屏幕且不自动恢复）
 远大于它省下的那一次点击。2026-09-26 实际被这个坑过。
 
+这条管的是**手势**。平板上关窗口 / 新桌面走"虚拟键盘点 Alt + 字母"
+（`mykeys.lua` §6，见 `docs/06`），要连点两个指定键，不算误触风险 ——
+别因为这条把那几个键位删掉，也别把它们"升级"成手势。
+
 ### 3. Hyprland 的 PATH 里没有 `~/.local/bin`
 
 Hyprland 进程的 PATH 是 `/usr/local/sbin:/usr/local/bin:/usr/bin:...`，
