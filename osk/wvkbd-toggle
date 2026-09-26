@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
 # wvkbd 显示/隐藏切换
 #
-# wvkbd 用信号控制可见性：
-#   SIGUSR1 = 隐藏
-#   SIGUSR2 = 显示
-#   SIGRTMIN (= kill 默认的 -34) = 切换
-#
 # 用法:
 #   wvkbd-toggle          # 切换（没运行就启动）
 #   wvkbd-toggle show     # 强制显示
 #   wvkbd-toggle hide     # 强制隐藏
+#
+# ★ 只在平板模式下显示。PC 模式（有 Type Cover）下 show / toggle 什么都不做，
+#   hide 照常。调用方有四个（fcitx 适配器、底部边缘手势、SUPER+K、mykeys §6），
+#   在这里统一判断，调用方不用各自知道模式。
+#   标记文件与 tablet-mode 是同一个，见那边的说明。
+#
+# ★ 不用 SIGRTMIN 切换，而是先查键盘在不在屏幕上、再发 show/hide，
+#   然后【核对结果】。原因是 wvkbd 0.19.4 有个卡死 bug（2026-09-27 实测复现）：
+#   短时间内连续 show/hide（间隔 10–20ms 量级，fcitx 焦点抖动时会出现），
+#   它的事件循环会卡在 wl_display_dispatch() 里、不再读信号 —— 进程活着，
+#   但之后所有 show/hide 都无效，键盘"消失"。
+#   这里的对策：发完信号看 layer 有没有按预期出现/消失，没有就判定卡死，
+#   杀掉重开。flock 把并发调用排成队，也减少连发。
+#
+# wvkbd 的信号：SIGUSR1 = 隐藏，SIGUSR2 = 显示。
 
 set -uo pipefail
 
@@ -18,34 +28,69 @@ BIN="wvkbd-deskintl"
 # -L 横屏高度（像素）。你的 eDP-1 是 2736x1824 @ scale 2
 #    => 逻辑分辨率 1368x912，键盘占约 300px 比较合适
 HEIGHT="${WVKBD_HEIGHT:-300}"
+FLAG="${XDG_STATE_HOME:-$HOME/.local/state}/surface-config/tablet.flag"
 
-pids() { pgrep -x "$BIN" 2>/dev/null; }
+# 从 fcitx5 / 手势里 exec 出来时环境不一定齐全，hyprctl 需要这个
+if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+    sig="$(ls -t "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/" 2>/dev/null | head -1)"
+    [ -n "$sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$sig"
+fi
+
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/wvkbd-toggle.lock"
+flock -w 3 9 || exit 0
+
+pid() { pgrep -x "$BIN" 2>/dev/null | head -1; }
+
+# 键盘此刻在不在屏幕上（layer-shell 的 namespace 是 wvkbd）
+visible() {
+    hyprctl layers -j 2>/dev/null \
+        | jq -e '[.[].levels[][] | select(.namespace == "wvkbd")] | length > 0' >/dev/null
+}
+
+# 等最多 ~0.6s，直到可见状态等于 $1（1 = 可见，0 = 不可见）
+wait_for() {
+    local want="$1" i
+    for i in 1 2 3 4 5 6; do
+        sleep 0.1
+        if visible; then [ "$want" = 1 ] && return 0
+        else             [ "$want" = 0 ] && return 0
+        fi
+    done
+    return 1
+}
 
 start() {
-    # --hidden 启动后不立即显示，随后用 SIGUSR2 显示，
-    # 这样能拿到准确的 PID 再控制它
-    "$BIN" -L "$HEIGHT" --hidden >/dev/null 2>&1 &
+    # --hidden 启动、随后 SIGUSR2 显示，这样能拿到准确的 PID
+    # 9>&- ：别让 wvkbd 继承锁的 fd，否则它常驻期间一直持锁，之后的调用全部排不上队
+    setsid "$BIN" -L "$HEIGHT" --hidden </dev/null >/dev/null 2>&1 9>&- &
     sleep 0.4
-    local p
-    p="$(pids | head -1)"
-    [[ -n "$p" ]] && kill -USR2 "$p" 2>/dev/null
+    local p; p="$(pid)"
+    [ -n "$p" ] && kill -USR2 "$p" 2>/dev/null
+}
+
+show() {
+    [ -f "$FLAG" ] || return 0          # PC 模式：不显示
+    local p; p="$(pid)"
+    if [ -z "$p" ]; then start; return; fi
+    kill -USR2 "$p" 2>/dev/null
+    if ! wait_for 1; then               # 信号没生效 → 卡死了，重开
+        kill -9 "$p" 2>/dev/null; sleep 0.2
+        start
+    fi
+}
+
+hide() {
+    local p; p="$(pid)"
+    [ -n "$p" ] || return 0
+    kill -USR1 "$p" 2>/dev/null
+    # 卡死的进程收不到 hide，杀掉即等于隐藏；下次 show 会重开
+    wait_for 0 || kill -9 "$p" 2>/dev/null
 }
 
 case "${1:-toggle}" in
-    show)
-        p="$(pids | head -1)"
-        if [[ -z "$p" ]]; then start; else kill -USR2 "$p" 2>/dev/null; fi
-        ;;
-    hide)
-        p="$(pids | head -1)"
-        [[ -n "$p" ]] && kill -USR1 "$p" 2>/dev/null
-        ;;
+    show) show ;;
+    hide) hide ;;
     toggle|*)
-        p="$(pids | head -1)"
-        if [[ -z "$p" ]]; then
-            start
-        else
-            kill -34 "$p" 2>/dev/null   # SIGRTMIN = 切换
-        fi
+        if [ -n "$(pid)" ] && visible; then hide; else show; fi
         ;;
 esac

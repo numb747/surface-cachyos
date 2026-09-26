@@ -78,6 +78,9 @@ apply() {
     # 只有在状态真的变了、且 Hyprland 在跑时才 reload，避免无谓重载
     if [ "$changed" = "1" ] && hypr_up; then
         hyprctl reload >/dev/null 2>&1
+        # 回 PC 模式时收起虚拟键盘。之后 wvkbd-toggle 自己看标记文件，
+        # PC 模式下不会再弹出来。
+        [ "$want" = "off" ] && /usr/local/bin/wvkbd-toggle hide >/dev/null 2>&1
         info "已切到$( [ "$want" = "on" ] && echo 平板 || echo PC )模式（配置已重载）"
     elif [ "$changed" = "0" ]; then
         info "已经是$( [ "$want" = "on" ] && echo 平板 || echo PC )模式，无需变动"
