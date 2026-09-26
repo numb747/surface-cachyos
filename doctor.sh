@@ -127,6 +127,24 @@ fi
 
 check "忽略原始触屏的 udev 规则已装" test -f /etc/udev/rules.d/71-surface-ipts-ignore-raw.rules
 
+# 打过"粘滞极大值"补丁的 iptsd（修单指划动断触，见 docs/08、setup/03）。
+# 没装只是警告：系统包原版照样能用，只是划动会断。
+# ★ 看的是【正在跑的进程】的可执行文件，不是 drop-in 在不在 —— drop-in 装了
+#   但没 daemon-reload / restart，跑的仍是原版，只查文件会误报绿。
+PATCHED_DROPIN=/etc/systemd/system/iptsd@.service.d/10-patched.conf
+running="$(readlink -f "/proc/$(pgrep -x iptsd | head -1)/exe" 2>/dev/null)"
+if [ "$running" = /usr/local/bin/iptsd ]; then
+    ok "iptsd 跑的是补丁版（/usr/local/bin/iptsd）"
+    # 补丁是对着某个版本做的。pacman 把系统包升级了而补丁版没重编，
+    # 就是新配置 + 旧程序，行为说不清 —— 提醒重跑 setup/03。
+    pkgver="$(pacman -Q iptsd 2>/dev/null | awk {print } | cut -d- -f1)"
+    [ "$pkgver" = "3.1.0" ] || warn "  └ 系统包 iptsd 已是 $pkgver，补丁版还是 3.1.0 → 重跑 ./setup/03-iptsd-patched.sh"
+elif [ -f "$PATCHED_DROPIN" ]; then
+    bad "补丁版 drop-in 已装但跑的还是 ${running:-?} → sudo systemctl daemon-reload && sudo systemctl restart iptsd@dev-hidraw1"
+else
+    warn "iptsd 跑的是系统包原版 → 单指划动会断；修：./setup/03-iptsd-patched.sh"
+fi
+
 # ── 3. hyprgrass 插件 ───────────────────────────────────────────────────────
 head_ "hyprgrass 触屏手势插件"
 if pgrep -x Hyprland >/dev/null 2>&1; then

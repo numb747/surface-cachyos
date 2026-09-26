@@ -1,0 +1,224 @@
+diff --git a/src/apps/perf/replay.cpp b/src/apps/perf/replay.cpp
+new file mode 100644
+index 0000000..752b9f0
+--- /dev/null
++++ b/src/apps/perf/replay.cpp
+@@ -0,0 +1,82 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++//
++// iptsd-replay：把 iptsd-dump 录下的原始数据喂给 iptsd 自己的触点识别流程，
++// 按守护进程（apps/daemon/touch.hpp）的规则输出落指 / 抬起：
++//     <帧号> DOWN <index> <x> <y>   /   <帧号> UP <index>
++// 不创建输入设备、不碰系统，纯离线，用来在同一份录像上比较参数和补丁。
++//
++// 用法：IPTSD_CONFIG_FILE=xxx.conf iptsd-replay <dump.bin>
++
++#include <common/types.hpp>
++#include <contacts/contact.hpp>
++#include <core/generic/application.hpp>
++#include <core/linux/device/file.hpp>
++#include <core/linux/runner.hpp>
++
++#include <CLI/CLI.hpp>
++#include <fmt/core.h>
++
++#include <set>
++#include <vector>
++
++namespace iptsd::apps::replay {
++
++class Replay : public core::Application {
++public:
++	usize frame = 0;
++	std::set<usize> down {};
++
++	Replay(const core::Config &config, const core::DeviceInfo &info)
++		: core::Application(config, info) {};
++
++	void on_touch(const std::vector<contacts::Contact<f64>> &contacts) override
++	{
++		frame++;
++		std::set<usize> now {};
++
++		for (const auto &c : contacts) {
++			if (!c.index.has_value())
++				continue;
++
++			const usize i = c.index.value();
++
++			// 与守护进程一致：不稳定的帧跳过（不更新、也不抬起）
++			if (!c.stable.value_or(true)) {
++				if (down.count(i))
++					now.insert(i);
++				continue;
++			}
++
++			bool lift = !c.valid.value_or(true);
++			lift |= c.mean.x() < 0 || c.mean.x() > 1;
++			lift |= c.mean.y() < 0 || c.mean.y() > 1;
++			if (lift)
++				continue;
++
++			now.insert(i);
++			if (!down.count(i))
++				fmt::print("{} DOWN {} {:.4f} {:.4f}\n", frame, i, c.mean.x(), c.mean.y());
++		}
++
++		for (const usize i : down)
++			if (!now.count(i))
++				fmt::print("{} UP {}\n", frame, i);
++
++		down = now;
++	}
++};
++
++} // namespace iptsd::apps::replay
++
++int main(int argc, char **argv)
++{
++	using namespace iptsd;
++	CLI::App app {"replay"};
++	std::filesystem::path path {};
++	app.add_option("DATA", path)->required();
++	CLI11_PARSE(app, argc, argv);
++
++	core::linux::Runner<apps::replay::Replay, core::linux::device::File> r {path};
++	r.run();
++	return 0;
++}
+diff --git a/src/contacts/detection/detector.hpp b/src/contacts/detection/detector.hpp
+index 09e5dda..ca6412a 100644
+--- a/src/contacts/detection/detector.hpp
++++ b/src/contacts/detection/detector.hpp
+@@ -20,6 +20,7 @@
+ 
+ #include <gsl/gsl>
+ 
++#include <algorithm>
+ #include <cmath>
+ #include <type_traits>
+ #include <vector>
+@@ -71,6 +72,13 @@ private:
+ 	// The cached neutral value of the heatmap.
+ 	T m_neutral = casts::to<T>(0);
+ 
++	// 上一帧检测到的触点中心（热图像素坐标）。
++	// 用于"粘滞极大值"：见 detect() 里 maximas::find 之后那一段。
++	std::vector<Point> m_last_centers {};
++
++	// 本帧的附加极大值（粘滞捞回来的）。
++	std::vector<Point> m_sticky {};
++
+ public:
+ 	Detector(Config<T> config) : m_config {std::move(config)} {};
+ 
+@@ -134,6 +142,58 @@ public:
+ 		// Find local maximas on the original blurred heatmap (stable maxima positions)
+ 		maximas::find(m_img_blurred, athresh, m_maximas);
+ 
++		/*
++		 * 粘滞极大值（sticky maxima）—— 修"手指划动时断触"。
++		 *
++		 * 手指在屏幕上移动时，指下电容信号的峰值会周期性地略微跌落（手指在
++		 * 两条感应线之间、按压力变化）。实测 Surface Pro 6：正常接触时指下峰值
++		 * 中位约 61，而断触的那几帧里 2/3 的峰值落在 32~40 —— 只差一点没过
++		 * ActivationThreshold(40)。于是这一帧"找不到极大值"，触点被抬起，
++		 * 下一帧峰值回来又重新落下，一次划动被切成几十段。
++		 *
++		 * DeactivationThreshold 本来就是为这种滞回设计的（区域生长只要求
++		 * 相邻像素高于它），但它只用在区域生长里，【判定极大值】却只看
++		 * ActivationThreshold，所以滞回对"峰值本身跌落"完全不起作用。
++		 *
++		 * 这里补上：上一帧有触点的地方（半径 RADIUS 像素内），允许峰值只要
++		 * 高于 DeactivationThreshold 就算极大值。全新的触点仍然要求达到
++		 * ActivationThreshold，所以不会凭空多出幽灵触点。
++		 */
++		constexpr Eigen::Index RADIUS = 3;
++		m_sticky.clear();
++
++		for (const Point &c : m_last_centers) {
++			// 这附近已经有正常的极大值了，不用管
++			bool covered = false;
++			for (const Point &m : m_maximas) {
++				if ((m - c).cwiseAbs().maxCoeff() <= RADIUS) {
++					covered = true;
++					break;
++				}
++			}
++			if (covered)
++				continue;
++
++			// 在邻域里找最大的像素
++			Point best = c;
++			T best_v = casts::to<T>(0);
++			for (Eigen::Index y = std::max<Eigen::Index>(0, c.y() - RADIUS);
++			     y <= std::min<Eigen::Index>(rows - 1, c.y() + RADIUS); y++) {
++				for (Eigen::Index x = std::max<Eigen::Index>(0, c.x() - RADIUS);
++				     x <= std::min<Eigen::Index>(cols - 1, c.x() + RADIUS); x++) {
++					if (m_img_blurred(y, x) > best_v) {
++						best_v = m_img_blurred(y, x);
++						best = Point {x, y};
++					}
++				}
++			}
++
++			if (best_v > dthresh)
++				m_sticky.push_back(best);
++		}
++
++		m_maximas.insert(m_maximas.end(), m_sticky.begin(), m_sticky.end());
++
+ 		// Create a suppressed copy used only for cluster spanning
+ 		const Image<T> *span_src = &m_img_blurred;
+ 
+@@ -153,7 +213,9 @@ public:
+ 		// Iterate over the maximas and start building clusters (on suppressed image if
+ 		// enabled)
+ 		for (const Point &point : m_maximas) {
+-			Box cluster = cluster::span(*span_src, point, athresh, dthresh);
++			const bool sticky =
++				std::find(m_sticky.begin(), m_sticky.end(), point) != m_sticky.end();
++			Box cluster = cluster::span(*span_src, point, sticky ? dthresh : athresh, dthresh);
+ 
+ 			if (cluster.isEmpty())
+ 				continue;
+@@ -198,11 +260,17 @@ public:
+ 		// Run gaussian fitting
+ 		gaussian::fit(m_fitting_params, m_img_blurred, m_fitting_temp, 3);
+ 
++		m_last_centers.clear();
++
+ 		// Create a contact from every gaussian fitting parameter
+ 		for (const auto &p : m_fitting_params) {
+ 			if (!p.valid)
+ 				continue;
+ 
++			m_last_centers.emplace_back(
++				std::clamp<Eigen::Index>(casts::to_eigen(std::lround(p.mean.x())), 0, cols - 1),
++				std::clamp<Eigen::Index>(casts::to_eigen(std::lround(p.mean.y())), 0, rows - 1));
++
+ 			const Matrix2<TFit> cov = p.prec.inverse();
+ 
+ 			Eigen::SelfAdjointEigenSolver<Matrix2<TFit>> solver {};
+diff --git a/src/meson.build b/src/meson.build
+index 07c92c0..de489df 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -162,6 +162,17 @@ if tools.contains('perf')
+ 	)
+ endif
+ 
++
++# iptsd-replay：离线回放 iptsd-dump 录像，输出守护进程会发的落指/抬起（调参/验证补丁用，不安装）
++executable(
++	'iptsd-replay',
++	'apps/perf/replay.cpp',
++	install: false,
++	cpp_args: optflags,
++	dependencies: default_deps,
++	include_directories: includes,
++)
++
+ if tools.contains('plot') or tools.contains('show')
+ 	cairo = dependency('cairomm-1.0', required: false)
+ endif

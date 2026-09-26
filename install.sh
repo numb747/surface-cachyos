@@ -204,6 +204,9 @@ mod_system() {
        sudo systemctl daemon-reload
        sudo systemctl restart 'iptsd@dev-hidraw1.service'
 
+  2b) iptsd 补丁版（修单指划动断触；先编译，编完它会打印安装命令）
+       ~/surface-cachyos/setup/03-iptsd-patched.sh           # 不需要 sudo
+
   3) /usr/local/bin 的两份真文件（udev 的 RUN 要用，见 tablet 模块）
        sudo install -m755 ~/.local/bin/tablet-mode   /usr/local/bin/tablet-mode
        sudo install -m755 ~/.local/bin/tablet-rescue /usr/local/bin/tablet-rescue
