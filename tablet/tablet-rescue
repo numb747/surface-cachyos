@@ -1,0 +1,56 @@
+#!/bin/bash
+# tablet-rescue —— 平板模式下的"救命键"（双指长按触发，见 config/hypr/touch-tablet.lua）
+#
+# 用来从手势误触造成的坏状态里恢复。平板模式没有键盘，够不着 SUPER+1，
+# 一旦界面被切到空工作区或抽屉工作区，纯触摸用户没法自己回来。
+#
+# ★ 必须是【幂等】的：状态本来就正常时，跑一次什么都不该改变。
+#   手势会被误触发，救援键自己不能再制造新的坏状态。
+#   （第一版无条件调 toggle_special()：抽屉没开时它会【打开】一个空抽屉
+#     盖住整个屏幕 —— 救援反而成了事故源。2026-09-26 实测踩过。）
+#
+# 动作：
+#   1. 窗口被困在抽屉里 → 移回普通工作区。
+#   2. 抽屉工作区开着 → 关掉。没开 → 不碰。
+#   3. 当前工作区是空的 → 跳到有窗口的工作区。
+#      用 dispatch 直接切，不走滑动动画。
+
+set -u
+
+LOG="${XDG_RUNTIME_DIR:-/tmp}/tablet-rescue.log"
+log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" >>"$LOG"; }
+
+# 从手势里 exec 出来时环境不一定齐全，显式补上
+if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+    sig="$(ls -t "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/" 2>/dev/null | head -1)"
+    [ -n "$sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$sig"
+fi
+
+log "--- rescue 开始 ---"
+
+# 1. 困在抽屉里的窗口先移回工作区 1（follow = false：只搬窗口，不跟过去）
+for addr in $(hyprctl clients -j | jq -r '.[] | select(.workspace.id < 0) | .address'); do
+    hyprctl dispatch "hl.dsp.window.move({ workspace = \"1\", window = \"address:$addr\", follow = false })" >/dev/null 2>&1
+    log "窗口 $addr 从抽屉移回工作区 1"
+done
+
+# 2. 抽屉开着才关。必须在搬完窗口【之后】查，而且要复查：从抽屉里搬走窗口后，
+#    Hyprland 会【稍后】重新显示抽屉（实测：关完立刻查是关的，0.5 秒后又开了）。
+#    所以每次关完等一会儿再看，最多 3 轮。
+for _ in 1 2 3; do
+    sleep 0.3
+    special="$(hyprctl monitors -j | jq -r '.[0].specialWorkspace.name // ""')"
+    [ -z "$special" ] && break
+    hyprctl dispatch "hl.dsp.workspace.toggle_special()" >/dev/null 2>&1
+    log "关闭了抽屉工作区 $special"
+done
+
+# 3. 当前工作区为空 → 跳到窗口最多的普通工作区
+cur="$(hyprctl activeworkspace -j | jq -r '.windows')"
+if [ "$cur" = "0" ]; then
+    target="$(hyprctl workspaces -j | jq -r '[.[] | select(.id > 0 and .windows > 0)] | max_by(.windows) | .id // 1')"
+    hyprctl dispatch "hl.dsp.focus({ workspace = \"$target\" })" >/dev/null 2>&1
+    log "当前工作区为空，切到工作区 $target"
+fi
+
+log "--- rescue 结束 ---"

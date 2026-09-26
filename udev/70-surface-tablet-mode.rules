@@ -1,0 +1,43 @@
+# ============================================================================
+#  Surface Type Cover 插拔 → 自动切换平板/PC 模式
+#
+#  装法（要 sudo，自己跑）：
+#      sudo install -m644 udev/70-surface-tablet-mode.rules \
+#           /etc/udev/rules.d/70-surface-tablet-mode.rules
+#      sudo udevadm control --reload-rules
+#
+#  验证：
+#      udevadm test /sys/bus/usb/devices/1-7     # 看规则有没有命中
+#      udevadm monitor --kernel --subsystem-match=usb | grep -i cover
+#
+#  ■ 为什么匹配 idVendor/idProduct 而不是端口号
+#      早先写的是 KERNEL=="1-7"（USB 端口号）。那个值换机型、换 Cover、
+#      甚至换 USB 拓扑都会变，很脆。改成按设备 ID 匹配：
+#          045e = Microsoft
+#          09c0 = Surface Type Cover
+#      查法：cat /sys/bus/usb/devices/*/idVendor 对应 product 看
+#
+#  ■ 为什么用 systemd-run --no-block
+#      udev 的 RUN 是同步的，会阻塞设备事件处理。而 tablet-mode 里要跑
+#      hyprctl reload，那可能耗时几百毫秒。加 --no-block 让 udev 不等待。
+#
+#  ■ 为什么脚本路径是 /usr/local/bin 而不是 ~/.local/bin
+#      udev 的 RUN 以 root 跑、环境最小，用不了 ~。
+#      所以 install.sh 会把 bin/tablet-mode 另装一份到 /usr/local/bin。
+#      那个目录同时在 Hyprland 的 PATH 里 —— 见 docs/07。
+# ============================================================================
+
+# Type Cover 接上 → 有物理键盘了 → PC 模式
+ACTION=="add", SUBSYSTEM=="usb", \
+    ATTRS{idVendor}=="045e", ATTRS{idProduct}=="09c0", \
+    RUN+="/usr/bin/systemd-run --no-block --user --collect --unit=tablet-mode-cover-add /usr/local/bin/tablet-mode auto"
+
+# Type Cover 摘下 → 只剩触屏 → 平板模式
+ACTION=="remove", SUBSYSTEM=="usb", \
+    ATTRS{idVendor}=="045e", ATTRS{idProduct}=="09c0", \
+    RUN+="/usr/bin/systemd-run --no-block --user --collect --unit=tablet-mode-cover-del /usr/local/bin/tablet-mode auto"
+
+# 开机时按当前状态定一次。
+# udev 的 add 事件在启动早期可能早于 Hyprland 起来 —— 那次 tablet-mode 会因为
+# Hyprland 未运行而只写标记文件、不 reload。这正是想要的：
+# 标记先落盘，Hyprland 起来读配置时就看到正确模式了。

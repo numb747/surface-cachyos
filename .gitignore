@@ -1,0 +1,17 @@
+# 安装时产生的备份。两种命名都要挡：
+# 本仓的 install.sh 用连字符（.bak-YYYYmmdd-HHMMSS），
+# 手工备份过的可能是点号（.bak.YYYYmmddHHMMSS）。
+*.bak-*
+*.bak.*
+
+# 打包/同步的中间产物
+*.tmp
+*.tmp2
+
+# 壁纸库本体（体积大，且是 _fetch.py 的产物，不入库）
+wallpaper/tokyonight/*.png
+wallpaper/tokyonight/*.jpg
+wallpaper/ascii/
+
+# 运行时状态
+*.log

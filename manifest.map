@@ -1,0 +1,146 @@
+# 文件映射表 —— 包内路径 ⇄ 系统路径
+#
+# 这是【单一事实来源】：install.sh、uninstall.sh、doctor.sh、sync.sh 都读它。
+# 新增一个要纳管的文件，只改这里一行，四个脚本自动跟上。
+#
+# 格式： <包内相对路径>  <系统路径>       （~ 和 $HOME 都会被展开）
+# 第三列 module 由分组注释决定，见每段开头的 #@module 标记。
+#
+# ★ 本仓不是 cachyOS-config 的伴生仓，而是【独立完整】的一份 Surface 配置。
+#   旧的两仓模式下，适配层要往主仓的文件里注入挂钩、并且每次同步后重跑。
+#   这里不需要 —— 本仓直接拥有 hyprland.lua，没有"被覆盖"这件事。
+#
+# ★ 需要 sudo 的东西【一律不在本表里】，见文件末尾那一段的说明。
+
+#@module hypr
+# Hyprland 入口。本仓拥有它（旧模式下这归主仓管、靠注入挂钩）。
+config/hypr/hyprland.lua                  ~/.config/hypr/hyprland.lua
+# 本机自有：上游 skel 里没有 touch.lua，是本仓新增的。
+config/hypr/config/touch.lua              ~/.config/hypr/config/touch.lua
+# 平板模式专属手势集，由 touch.lua 按标记文件条件 require。
+config/hypr/config/touch-tablet.lua       ~/.config/hypr/config/touch-tablet.lua
+# 自启。本仓拥有它（旧模式下 iio-hyprland 是往里插一行，靠 grep 幂等，很脆）。
+config/hypr/config/autostart.lua          ~/.config/hypr/config/autostart.lua
+# 下面这些是从 CachyOS 上游 skel 改出来的，改过的理由写在各自文件头。
+config/hypr/config/binds.lua              ~/.config/hypr/config/binds.lua
+config/hypr/config/variables.lua          ~/.config/hypr/config/variables.lua
+config/hypr/config/monitors.lua           ~/.config/hypr/config/monitors.lua
+config/hypr/config/inputs.lua             ~/.config/hypr/config/inputs.lua
+# mykeys.lua：本机键位，932 行的 PC 版精简到平板可用的部分。
+config/hypr/mykeys.lua                    ~/.config/hypr/mykeys.lua
+# 录屏脚本，配合 mykeys.lua 的 Super+Shift/Alt+R。
+bin/hypr-screenrec                        ~/.local/bin/hypr-screenrec
+
+#@module tablet
+# 平板/PC 模式开关与救援键。
+#
+# ★ 装到 ~/.local/bin（$HOME 内，install.sh 能直接写），再由 system 模块
+#   打印一条 sudo 命令复制到 /usr/local/bin —— udev 的 RUN 以 root 跑、
+#   环境最小，用不了 ~，所以那里必须有一份真文件。
+#
+#   为什么不直接把 /usr/local/bin 写进这张表：本仓的性质是"install.sh
+#   只写 $HOME"，表里放一个要 sudo 的路径会让这条性质破功（旧仓这么干过）。
+#
+#   为什么不只装 /usr/local/bin 一份：touch-tablet.lua 等地方引用的是
+#   ~/.local/bin 路径，两边都要在。旧仓同时装了两份、两份都陈旧过 ——
+#   那是 doctor 只查存在性造成的，本仓的 doctor 比对内容。
+tablet/tablet-mode                        ~/.local/bin/tablet-mode
+tablet/tablet-rescue                      ~/.local/bin/tablet-rescue
+
+#@module osk
+# 虚拟键盘的信号封装。wvkbd 用 SIGUSR1/2/SIGRTMIN 控制显隐，这里包成
+# show/hide/toggle 三个动作。
+osk/wvkbd-toggle                          ~/.local/bin/wvkbd-toggle
+# fcitx 适配器配置：文本框获得/失去焦点 → 调上面那个脚本。
+# 里面【必须】是绝对路径，原因见文件头注释；install.sh 会按当前 $HOME 改写。
+osk/virtualkeyboardadapter.conf           ~/.config/fcitx5/conf/virtualkeyboardadapter.conf
+
+#@module sensor
+# iio-sensor-proxy 的 systemd 依赖：iio-hyprland 要读 D-Bus 上的
+# net.hadess.SensorProxy，光装包不保证 sensor-proxy 先起来，会偶发"开机后不旋转"。
+#
+# ★ 装在【用户目录】而不是 /etc/systemd/user/ —— 两个理由：
+#   1. 它是用户级服务，没理由进 /etc；
+#   2. 进 /etc 就要 sudo，会破坏本仓"install.sh 只写 $HOME"的性质。
+#   （旧仓写的是 /etc/systemd/user/，而且实测那份【根本没装】，
+#     所以 docs/04 记的"开机偶发不旋转"一直是活的。）
+systemd/iio-hyprland.service              ~/.config/systemd/user/iio-hyprland.service
+
+#@module ui
+config/noctalia/config.toml               ~/.config/noctalia/config.toml
+# 壁纸路径等含绝对路径，install.sh 按当前 $HOME 改写。
+state/noctalia/settings.toml              ~/.local/state/noctalia/settings.toml
+config/uwsm/env                           ~/.config/uwsm/env
+config/gtk-3.0/settings.ini               ~/.config/gtk-3.0/settings.ini
+config/gtk-4.0/gtk.css                    ~/.config/gtk-4.0/gtk.css
+config/gtk-4.0/noctalia.css               ~/.config/gtk-4.0/noctalia.css
+config/qt6ct/qt6ct.conf                   ~/.config/qt6ct/qt6ct.conf
+config/qt6ct/colors/noctalia.conf         ~/.config/qt6ct/colors/noctalia.conf
+config/kdeglobals                         ~/.config/kdeglobals
+config/btop/btop.conf                     ~/.config/btop/btop.conf
+config/btop/themes/noctalia.theme         ~/.config/btop/themes/noctalia.theme
+# 修 Han 字被韩文字形渲染的问题。与 locale 无关，平板同样需要。
+config/fontconfig/fonts.conf              ~/.config/fontconfig/fonts.conf
+# 输入法：平板是触屏输入，虚拟键盘 + 输入法两层都必需。
+config/fcitx5/profile                     ~/.config/fcitx5/profile
+config/fcitx5/config                      ~/.config/fcitx5/config
+config/fcitx5/conf/notifications.conf     ~/.config/fcitx5/conf/notifications.conf
+config/fcitx5/conf/classicui.conf         ~/.config/fcitx5/conf/classicui.conf
+share/fcitx5/themes/tokyonight/theme.conf ~/.local/share/fcitx5/themes/tokyonight/theme.conf
+share/fcitx5/themes/tokyonight/panel.png  ~/.local/share/fcitx5/themes/tokyonight/panel.png
+share/fcitx5/themes/tokyonight/highlight.png ~/.local/share/fcitx5/themes/tokyonight/highlight.png
+share/fcitx5/themes/tokyonight/prev.png   ~/.local/share/fcitx5/themes/tokyonight/prev.png
+share/fcitx5/themes/tokyonight/next.png   ~/.local/share/fcitx5/themes/tokyonight/next.png
+share/fcitx5/themes/tokyonight/arrow.png  ~/.local/share/fcitx5/themes/tokyonight/arrow.png
+share/fcitx5/themes/tokyonight/radio.png  ~/.local/share/fcitx5/themes/tokyonight/radio.png
+
+#@module apps
+# 默认打开方式：图片 → imv，音视频 → mpv。
+config/mimeapps.list                      ~/.config/mimeapps.list
+config/mpv/mpv.conf                       ~/.config/mpv/mpv.conf
+share/applications/imv-viewer.desktop     ~/.local/share/applications/imv-viewer.desktop
+
+#@module wall
+# 壁纸库与生成脚本。平板上换壁纸是常用操作（noctalia 的主题跟着壁纸走）。
+# ★ 壁纸库本体（wallpaper/tokyonight/*.png 之类）不入库 —— 体积大且是生成物，
+#   _fetch.py 负责按 _picks.json 重新拉。见 docs。
+wallpaper/wallhaven-kxwp96.jpg            ~/Pictures/Wallpapers/wallhaven-kxwp96.jpg
+wallpaper/tokyonight/_fetch.py            ~/Pictures/Wallpapers/tokyonight/_fetch.py
+wallpaper/tokyonight/_fetch2.py           ~/Pictures/Wallpapers/tokyonight/_fetch2.py
+wallpaper/tokyonight/_build.py            ~/Pictures/Wallpapers/tokyonight/_build.py
+wallpaper/tokyonight/_ascii.py            ~/Pictures/Wallpapers/tokyonight/_ascii.py
+wallpaper/tokyonight/_picks.json          ~/Pictures/Wallpapers/tokyonight/_picks.json
+wallpaper/tokyonight/_picks2.json         ~/Pictures/Wallpapers/tokyonight/_picks2.json
+wallpaper/tokyonight/index.html           ~/Pictures/Wallpapers/tokyonight/index.html
+
+#@module ocr
+# 屏幕取字：RapidOCR 常驻服务 + 抓屏客户端。
+# 平板模式下没有键盘，用手写笔圈一块屏取字比敲快捷键实际。
+bin/ocr-server                            ~/.local/bin/ocr-server
+bin/ocr-grab                              ~/.local/bin/ocr-grab
+bin/theme-switch                          ~/.local/bin/theme-switch
+bin/theme-preview                         ~/.local/bin/theme-preview
+config/systemd/user/ocrd.socket           ~/.config/systemd/user/ocrd.socket
+config/systemd/user/ocrd.service          ~/.config/systemd/user/ocrd.service
+
+#@module term
+config/kitty/kitty.conf                   ~/.config/kitty/kitty.conf
+config/kitty/themes/noctalia.conf         ~/.config/kitty/themes/noctalia.conf
+config/alacritty/alacritty.toml           ~/.config/alacritty/alacritty.toml
+config/alacritty/themes/noctalia.toml     ~/.config/alacritty/themes/noctalia.toml
+home/.zshrc                               ~/.zshrc
+home/.p10k.zsh                            ~/.p10k.zsh
+
+# ── 不在同步范围内（有意）──────────────────────────────────────────────────
+#
+# ★ 需要 sudo 的一律不进表。install.sh 只写 $HOME，这些由 ./install.sh system
+#   模块【打印命令】让你自己跑：
+#     udev/70-surface-tablet-mode.rules   → /etc/udev/rules.d/
+#     udev/71-surface-ipts-ignore-raw.rules → /etc/udev/rules.d/
+#     systemd/iptsd@.service.d/override.conf → /etc/systemd/system/
+#     setup/01-surface-kernel.sh          → 内核包 + limine 启动项
+#     setup/02-hyprgrass.sh               → 插件（必须手敲，见该脚本头部）
+#     以及 /usr/local/bin 下 tablet-mode / tablet-rescue / wvkbd-toggle 的软链
+#
+# ~/.local/state/surface-config/tablet.flag   运行时状态，不入库。
+# config/nvim/、wine/、cc/                    本仓有意不搬，见 README 的说明。

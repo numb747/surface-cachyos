@@ -1,0 +1,54 @@
+# ============================================================================
+#  禁掉原始 IPTS 触屏设备，只保留 iptsd 造的那个虚拟触屏
+#
+#  装法（要 sudo，自己跑）：
+#      sudo install -m644 udev/71-surface-ipts-ignore-raw.rules \
+#           /etc/udev/rules.d/71-surface-ipts-ignore-raw.rules
+#      sudo udevadm control --reload-rules
+#      sudo udevadm trigger --subsystem-match=input
+#
+#  ■ 为什么要禁
+#      Surface 的触屏在 Linux 上有【两个】evdev 设备：
+#
+#        IPTS 045E:001F Touchscreen         ← 内核 ipts 模块给的原始设备
+#        IPTSD Virtual Touchscreen 045E:001F ← iptsd 读完 hidraw 后造的
+#
+#      两个都带 ID_INPUT_TOUCHSCREEN=1，所以合成器（Hyprland 经 libinput）
+#      两个都会监听，同一次触摸被上报两遍。而且两个设备的几何信息不一致：
+#
+#        raw   : WIDTH_MM=292 HEIGHT_MM=165  → 比例 1.77 (16:9)  ✗ 错
+#        iptsd : WIDTH_MM=259 HEIGHT_MM=171  → 比例 1.51 (3:2)   ✓ 对
+#
+#      Surface Pro 6 是 3:2 屏。原始设备报的比例是错的，说明它的坐标映射
+#      不正确。两路事件坐标互相打架 —— 表现就是"触摸不灵敏""滑动不跟手"。
+#
+#      iptsd 是走 hidraw 读数据的，不依赖这个 evdev 设备，
+#      所以禁掉它不影响 iptsd 工作。
+#
+#  ■ 为什么用名字精确匹配
+#      同一颗芯片还会造出 "IPTS 045E:001F"（无 Touchscreen 后缀）和
+#      "IPTSD Virtual Touchscreen 045E:001F"。必须精确匹配带
+#      "Touchscreen" 后缀的那个，别误伤虚拟设备。
+#
+#  ■ 怎么验证生效
+#      sudo libinput list-devices | grep -iA2 ipts
+#      应该只剩 IPTSD 那个，原始的不再列出。
+#
+#      或者：
+#      udevadm info /dev/input/event23 | grep ID_INPUT_TOUCHSCREEN
+#      应该从 1 变成 0（设备号可能变，用名字找：
+#      grep -l "IPTS 045E:001F Touchscreen" /sys/class/input/*/name）
+#
+#  ■ 怎么回滚
+#      sudo rm /etc/udev/rules.d/71-surface-ipts-ignore-raw.rules
+#      sudo udevadm control --reload-rules
+#      sudo udevadm trigger --subsystem-match=input
+# ============================================================================
+
+# 只匹配原始设备：名字精确等于 "IPTS 045E:001F Touchscreen"
+# （注意有空格，且必须以 Touchscreen 结尾 —— 别用通配符 IPTS*）
+ACTION=="add|change", SUBSYSTEM=="input", \
+    ATTRS{name}=="IPTS 045E:001F Touchscreen", \
+    ENV{ID_INPUT_TOUCHSCREEN}="0", \
+    ENV{ID_INPUT}="0", \
+    ENV{LIBINPUT_IGNORE_DEVICE}="1"

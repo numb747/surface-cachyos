@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  平板模式开关
+#
+#  用法：
+#      tablet-mode on          进平板模式
+#      tablet-mode off         回 PC 模式
+#      tablet-mode toggle      切换
+#      tablet-mode status      看当前模式
+#      tablet-mode auto        按 Type Cover 在不在自动判定（udev 用这个）
+#
+#  原理：
+#      维护一个标记文件 ~/.local/state/surface-config/tablet.flag。
+#      config/touch.lua 在【配置加载时】读这个文件，存在就 require
+#      平板手势集（config/touch-tablet.lua）。
+#
+#      所以切换 = 改标记 + hyprctl reload。
+#
+#  ★ 为什么不用 hyprctl repl 运行时绑定
+#      实测过：`hyprctl repl` 【只校验参数，不真派发】。
+#      证据：从 repl 里调 hl.dsp.exec_cmd("touch /tmp/xxx") 不会产生文件。
+#      所以 repl 里 bind 手势是假成功，切完没反应。
+#      走标记文件 + reload 是唯一可靠的路径。
+# ============================================================================
+set -uo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/surface-config"
+FLAG="$STATE_DIR/tablet.flag"
+
+# Type Cover 的 USB 标识。udev 规则（udev/70-surface-tablet-mode.rules）
+# 用的是同一对值 —— 改一处即可。
+#
+# ★ 早先这里写的是端口号 KERNEL=="1-7"，很脆：换机型、换 Cover、
+#   换 USB 拓扑都会变。改成按设备 ID 找，从 USB 设备树里搜：
+#       045e = Microsoft
+#       09c0 = Surface Type Cover
+COVER_VID="${SURFACE_COVER_VID:-045e}"
+COVER_PID="${SURFACE_COVER_PID:-09c0}"
+
+info() { printf '  %s\n' "$*"; }
+
+is_tablet() { [ -f "$FLAG" ]; }
+
+# Type Cover 在不在 —— 按 idVendor/idProduct 在 USB 设备树里搜。
+# 不用 lsusb：那玩意是可选依赖，而且解析输出比读 sysfs 脆。
+cover_path() {
+    local d
+    for d in /sys/bus/usb/devices/*/; do
+        [ -r "$d/idVendor" ] || continue
+        if [ "$(cat "$d/idVendor" 2>/dev/null)" = "$COVER_VID" ] \
+        && [ "$(cat "$d/idProduct" 2>/dev/null)" = "$COVER_PID" ]; then
+            basename "$d"
+            return 0
+        fi
+    done
+    return 1
+}
+
+cover_present() { cover_path >/dev/null 2>&1; }
+
+# 有没有真的 Hyprland 实例（udev 触发时可能还没有）
+hypr_up() {
+    command -v hyprctl >/dev/null 2>&1 && hyprctl version >/dev/null 2>&1
+}
+
+apply() {
+    local want="$1"          # on / off
+    local changed=0
+
+    mkdir -p "$STATE_DIR"
+
+    if [ "$want" = "on" ]; then
+        if ! is_tablet; then : > "$FLAG"; changed=1; fi
+    else
+        if is_tablet; then rm -f "$FLAG"; changed=1; fi
+    fi
+
+    # 只有在状态真的变了、且 Hyprland 在跑时才 reload，避免无谓重载
+    if [ "$changed" = "1" ] && hypr_up; then
+        hyprctl reload >/dev/null 2>&1
+        info "已切到$( [ "$want" = "on" ] && echo 平板 || echo PC )模式（配置已重载）"
+    elif [ "$changed" = "0" ]; then
+        info "已经是$( [ "$want" = "on" ] && echo 平板 || echo PC )模式，无需变动"
+    else
+        info "状态已记为$( [ "$want" = "on" ] && echo 平板 || echo PC )模式（Hyprland 未运行，下次启动生效）"
+    fi
+}
+
+case "${1:-status}" in
+    on)     apply on ;;
+    off)    apply off ;;
+    toggle) is_tablet && apply off || apply on ;;
+    status)
+        if is_tablet; then
+            echo "平板模式（标记文件存在：$FLAG）"
+        else
+            echo "PC 模式（标记文件不存在）"
+        fi
+        # Type Cover 实测状态，跟模式对不上时提示
+        if cp=$(cover_path); then
+            echo "Type Cover: 已连接（USB $cp, $COVER_VID:$COVER_PID）"
+        else
+            echo "Type Cover: 未连接（$COVER_VID:$COVER_PID）"
+        fi
+        ;;
+    auto)
+        # udev 触发用。注意可能由 add/remove 两个事件先后触发，
+        # 所以每次都重新读设备状态，不依赖事件类型。
+        if cover_present; then apply off; else apply on; fi
+        ;;
+    -h|--help)
+        sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+        ;;
+    *)
+        echo "用法: tablet-mode {on|off|toggle|status|auto}" >&2
+        exit 2
+        ;;
+esac

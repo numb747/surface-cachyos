@@ -1,0 +1,36 @@
+# iio-hyprland —— 读加速计，自动旋转 Hyprland 输出
+#
+# 为什么需要这个 unit，而不是直接 hl.exec_cmd("iio-hyprland")：
+#   它是【普通用户进程】，靠 D-Bus 读 net.hadess.SensorProxy。
+#   光装上 iio-sensor-proxy 不保证它在 iio-hyprland 启动时已经就绪，
+#   于是开机偶发"不旋转"，重启一次又好了 —— 这种偶发最难查。
+#
+#   unit 里声明 After/Requires 之后，启动顺序由 systemd 保证。
+#   ★ 注意 iio-sensor-proxy.service 是 static（没有 [Install]），
+#     所以 Wants= 而不是 Requires= -- 它由 D-Bus 激活，
+#     用 Requires= 会让本 unit 在它没被激活时直接失败。
+#
+# 装法（要 sudo）：
+#   sudo install -m644 systemd/etc/iio-hyprland.service \
+#        /etc/systemd/user/iio-hyprland.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now iio-hyprland.service
+
+[Unit]
+Description=Automatic screen rotation for Hyprland (iio-sensor-proxy)
+Documentation=https://github.com/zedd3v/iio-hyprland
+# 普通用户 unit，但传感器在系统 D-Bus 上
+After=graphical-session.target
+Wants=iio-sensor-proxy.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# 必须是 session 总线上的名字，否则读不到 system 总线的 SensorProxy
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+ExecStart=/usr/bin/iio-hyprland
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

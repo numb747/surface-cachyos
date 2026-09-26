@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# wvkbd 显示/隐藏切换
+#
+# wvkbd 用信号控制可见性：
+#   SIGUSR1 = 隐藏
+#   SIGUSR2 = 显示
+#   SIGRTMIN (= kill 默认的 -34) = 切换
+#
+# 用法:
+#   wvkbd-toggle          # 切换（没运行就启动）
+#   wvkbd-toggle show     # 强制显示
+#   wvkbd-toggle hide     # 强制隐藏
+
+set -uo pipefail
+
+BIN="wvkbd-deskintl"
+# 桌面版布局（US International），适合 12.3 寸屏
+# -L 横屏高度（像素）。你的 eDP-1 是 2736x1824 @ scale 2
+#    => 逻辑分辨率 1368x912，键盘占约 300px 比较合适
+HEIGHT="${WVKBD_HEIGHT:-300}"
+
+pids() { pgrep -x "$BIN" 2>/dev/null; }
+
+start() {
+    # --hidden 启动后不立即显示，随后用 SIGUSR2 显示，
+    # 这样能拿到准确的 PID 再控制它
+    "$BIN" -L "$HEIGHT" --hidden >/dev/null 2>&1 &
+    sleep 0.4
+    local p
+    p="$(pids | head -1)"
+    [[ -n "$p" ]] && kill -USR2 "$p" 2>/dev/null
+}
+
+case "${1:-toggle}" in
+    show)
+        p="$(pids | head -1)"
+        if [[ -z "$p" ]]; then start; else kill -USR2 "$p" 2>/dev/null; fi
+        ;;
+    hide)
+        p="$(pids | head -1)"
+        [[ -n "$p" ]] && kill -USR1 "$p" 2>/dev/null
+        ;;
+    toggle|*)
+        p="$(pids | head -1)"
+        if [[ -z "$p" ]]; then
+            start
+        else
+            kill -34 "$p" 2>/dev/null   # SIGRTMIN = 切换
+        fi
+        ;;
+esac
