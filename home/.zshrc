@@ -38,6 +38,10 @@ if [ -d "$HACKTOOLS" ]; then
     alias vulnx="$HACKTOOLS/vulnx"
     command -v java >/dev/null 2>&1 && \
         alias vineflower="java -jar $HACKTOOLS/vineflower.jar"
+    # ★ 这两条原本在守卫【外面】，所以目录不存在时照样定义了指向空路径的别名
+    #   （注释写着"静默跳过"，代码没做到）。挪进来才算名副其实。
+    alias difft="$HACKTOOLS/difft/difft"
+    alias gittype="$HACKTOOLS/gittype"
 fi
 
 # ─── AI sandbox 容器 ────────────────────────────────────────────────────────
@@ -64,8 +68,6 @@ alias ccs='~/.claude/cc-watch.py --once'   # 打一次快照
 alias ccp='~/.claude/cc-pet.py'            # 宠物版 TUI（可上下选择）
 
 
-alias difft='/home/david/hacktools/difft/difft'
-alias gittype='/home/david/hacktools/gittype'
 
 # Claude Code 陪练模式：AI 只做解释/导读/挑刺，不替你解题
 # 进程级生效，不落盘、不影响其他窗口的 claude
@@ -76,5 +78,3 @@ coach() {
 }
 
 
-# Added by Antigravity CLI installer
-export PATH="/home/david/.local/bin:$PATH"

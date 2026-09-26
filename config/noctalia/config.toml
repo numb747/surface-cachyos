@@ -1,35 +1,40 @@
 [accessibility]
 ui_scale = 1.20
 
-# auto_hide/smart_auto_hide 都关掉：两者都自带"指针到达顶部边缘即触发
-# reveal"的 hit-test 条，鼠标去点浏览器标签页之类贴着顶部的 UI 时会被误
-# 触发弹出。改为纯 IPC 手动控制，逻辑在 ~/.config/hypr/mykeys.lua 第 9 节：
-# ALT+9 手动切换，切工作区时 `noctalia msg bar-show` 弹一下、1.5 秒后
-# `bar-hide` 自动收回。
+# ── 顶部 bar：Surface 竖屏（逻辑宽只有 912）版 ─────────────────────────────
+# ★ reserve_space = true：bar 常驻并占位，窗口从它下面开始排。
+#   PC 版是 false + 切工作区时 bar-show/1.5 秒后 bar-hide 的 IPC 弹出，那套逻辑
+#   在 mykeys.lua 里，本仓已删 —— 删了之后 bar 常显却不占位，结果就是盖住
+#   浏览器的标签栏（实测：窗口 y=10 起，bar 占 0~46）。
+# ★ auto_hide 仍然关：它靠"指针到顶部边缘"触发，触屏没有常驻指针，没法用。
+#
+# widget 取舍（PC 版 16 个 → 这里 8 个，912 宽塞不下）：
+#   删 active_window  —— 和窗口自己的标题栏重复，还最占宽度
+#   删 temp/sysmon×2  —— PC 的监控需求；要看点控制中心里的 System 页
+#   删 media          —— 控制中心首页就有播放卡片
+#   加 battery        —— 平板最该常驻的信息，PC 版没有
+#   tray 改抽屉模式   —— v2rayN 等托盘图标收进一个按钮，不挤占宽度
+#   session → control_center：电源菜单在控制中心右上角也有，而控制中心是
+#     平板上的总入口（WiFi/蓝牙/亮度/勿扰都在里面），比电源按钮更常用
+#
+# 尺寸：thickness 35 × scale 1.10 × ui_scale 1.20 ≈ 46 逻辑 px ≈ 9mm（267ppi、
+#   scale 2），刚好是手指点击目标的推荐下限，别再调小。
 [bar.default]
 auto_hide = false
-center = [ "workspaces", "spacer_1", "active_window" ]
+smart_auto_hide = false
+reserve_space = true
+start = [ "launcher", "clock" ]
+center = [ "workspaces" ]
+end = [ "tray", "notifications", "network", "battery", "volume", "control-center" ]
 concave_edge_corners = true
-end = [ "media", "spacer_1", "tray", "notifications", "network", "volume", "session" ]
 margin_edge = 0
 margin_ends = 0
 radius_bottom_left = 12
 radius_bottom_right = 12
 radius_top_left = 0
 radius_top_right = 0
-reserve_space = false
 scale = 1.10
-smart_auto_hide = false
-start = [ "launcher", "clock", "spacer_1", "group:g1" ]
 thickness = 35
-
-    [[bar.default.capsule_group]]
-    border = ""
-    fill = "on_secondary"
-    id = "g1"
-    members = [ "temp", "sysmon_2", "sysmon_3" ]
-    opacity = 1.0
-    padding = 6.0
 
 # pear-desktop（YouTube Music）每换一首歌就在屏幕顶部弹一次，来源不是通知，
 # 是 noctalia 自己的 OSD "Now Playing"（osd-kinds-media：Show an OSD popup
@@ -124,7 +129,7 @@ settings_show_advanced = true
 #   （文件本身不会被删，换回原密钥即可恢复）。
 [storage]
 key_source = "file"
-key_file = "/home/david/.config/noctalia/storage.key"
+key_file = "/home/charlen/.config/noctalia/storage.key"
 
 [system.monitor]
 gpu_poll_seconds = 2
@@ -139,44 +144,30 @@ wallpaper_scheme = "m3-tonal-spot"
 
 [widget.clock]
 color = "secondary"
-format = "{:%H:%M %A %m/%d/%y}"
+# 只留时间+月日；星期/年份点一下时钟看日历
+format = "{:%H:%M  %m/%d}"
 
 [widget.launcher]
 color = "secondary"
-
-[widget.media]
-hide_when_no_media = true
-title_scroll = "on_hover"
 
 [widget.network]
 color = "secondary"
 
 [widget.notifications]
 color = "secondary"
-
-[widget.session]
-color = "error"
-
-[widget.spacer_1]
-type = "spacer"
-
-[widget.temp]
-show_value = false
-
-[widget.sysmon_2]
-glyph = "gpu-usage"
-show_value = false
-stat = "gpu_temp"
-type = "sysmon"
-
-[widget.sysmon_3]
-glyph = "cpu-2"
-stat = "ram_used"
-type = "sysmon"
+hide_when_no_unread = true
 
 [widget.tray]
 capsule = true
 capsule_fill = "on_secondary"
+drawer = true
+
+[widget.battery]
+color = "secondary"
+label_content = "percent"
+
+[widget.control-center]
+color = "secondary"
 
 [widget.volume]
 color = "secondary"

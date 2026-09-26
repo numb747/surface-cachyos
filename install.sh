@@ -44,16 +44,37 @@ head_(){ printf '\n%s── %s %s\n' "$DIM" "$*" "$RST"; }
 #   密钥读不到 → 剪贴板历史不持久化
 #   壁纸路径不存在 → 退回默认壁纸
 #   适配器 Exec 找不到 → 虚拟键盘不弹
-PKG_HOME="/home/charlen"
+# ★ 两个占位符，不是一个。
+#   本仓的文件来自两处：从 cachyOS-config 搬来的那些里面是打【包机】david 的
+#   家目录；本仓新写/改过的里面是 charlen。所以两个都得换。
+#
+# ★ 不要再用 [ "$HOME" = "$PKG_HOME" ] && return 0 短路 —— 这正是本次踩的坑：
+#   打包占位符恰好就是本机用户（charlen），短路之后包里那些写着 /home/david
+#   的路径【一个都没被改写】。而 /home/david 不存在，症状是：
+#     noctalia key_file 读不到  → 剪贴板历史重启即丢（日志里只有
+#                                 [secret-store] provider-unavailable，不指向路径）
+#     settings.toml 壁纸路径不存在 → 退回默认壁纸
+#     .zshrc 里 hacktools 别名指向空目录
+#   没有报错，全都静默。
+PKG_HOMES=( "/home/david" "/home/charlen" )
 rewrite_home() {
-    [ "$HOME" = "$PKG_HOME" ] && return 0
+    local ph hit=0
     if [ $DRY -eq 1 ]; then
-        printf '  [dry] 改写 %s 里的 %s → %s\n' "$1" "$PKG_HOME" "$HOME"
+        for ph in "${PKG_HOMES[@]}"; do
+            [ "$ph" = "$HOME" ] && continue
+            grep -q "$ph" "$1" 2>/dev/null && \
+                printf '  [dry] 改写 %s 里的 %s → %s\n' "$1" "$ph" "$HOME"
+        done
         return 0
     fi
     [ -f "$1" ] || return 0
-    grep -q "$PKG_HOME" "$1" 2>/dev/null || return 0
-    sed -i "s#$PKG_HOME#$HOME#g" "$1" && inf "路径已改写到 \$HOME：$(basename "$1")"
+    for ph in "${PKG_HOMES[@]}"; do
+        [ "$ph" = "$HOME" ] && continue        # 已经是对的，别做无谓的 sed
+        grep -q "$ph" "$1" 2>/dev/null || continue
+        sed -i "s#$ph#$HOME#g" "$1" && hit=1
+    done
+    [ $hit -eq 1 ] && inf "路径已改写到 \$HOME：$(basename "$1")"
+    return 0
 }
 
 # put <相对源路径> <目标绝对路径>
