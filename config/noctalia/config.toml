@@ -225,9 +225,10 @@ color = "secondary"
 # ── 事件 hook ──────────────────────────────────────────────────────────────
 # 锁屏后在平板模式下弹出虚拟键盘（wvkbd 有 above_lock 规则，画在锁屏之上，
 # 见 mykeys.lua §4）；解锁后收起。
+# 两个 hook 顺带维护锁屏标记，mykeys.lua §7 的音量键靠它判断锁着时不翻页。
 [hooks]
-session_locked = "/usr/local/bin/surface-ctl osk-on-lock"
-session_unlocked = "/usr/local/bin/wvkbd-toggle hide"
+session_locked = "/usr/local/bin/surface-ctl on-lock"
+session_unlocked = "/usr/local/bin/surface-ctl on-unlock"
 
 # ── 空闲 ───────────────────────────────────────────────────────────────────
 # 只做"熄屏"，不自动锁屏：锁屏后要输密码，平板上不值得（手动锁屏走顶栏按钮）。

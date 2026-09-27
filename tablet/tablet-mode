@@ -179,7 +179,19 @@ case "${1:-status}" in
     auto)
         # surface-typecover.service 的 ExecStart/ExecStop 和开机自启调它。
         # 可能被连续触发、先后乱序，所以每次都重新读设备状态，不依赖事件类型。
-        if cover_present; then apply off; else apply on; fi
+        if cover_present; then
+            # 开机时 Cover 本来就接着：用户管理器起来时设备已经在了，
+            # SYSTEMD_USER_WANTS 可能不触发（coldplug 不算"出现"），服务没起的话
+            # 第一次拔 Cover 就没有 ExecStop 可跑。这里补拉一次；已在跑或正被
+            # 拉起时是空操作。
+            # ★ 本单元自己调进来时（ExecStart/ExecStop）不拉：ExecStop 里拉会把
+            #   手动 stop 取消掉（实测 "Job for surface-typecover.service canceled"）。
+            [ -z "${SURFACE_TYPECOVER_UNIT:-}" ] \
+                && systemctl --user start --no-block surface-typecover.service >/dev/null 2>&1
+            apply off
+        else
+            apply on
+        fi
         ;;
     -h|--help)
         sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'

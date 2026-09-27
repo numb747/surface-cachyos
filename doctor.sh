@@ -205,7 +205,10 @@ if systemctl --user is-enabled iio-hyprland.service >/dev/null 2>&1; then
     # 只在平板模式下转（unit 里 ConditionPathExists=标记文件）。
     # PC 模式固定横屏：服务不该在跑，屏幕应是 transform 0。
     rot_active=$(systemctl --user is-active iio-hyprland.service 2>/dev/null)
-    transform=$(hyprctl monitors 2>/dev/null | awk '/transform:/ {print $2; exit}')
+    # 只看内屏：接了外接屏时 monitors 的第一项不一定是 eDP-1
+    edp=$(hyprctl monitors -j 2>/dev/null | jq -c '.[] | select(.name=="eDP-1")' 2>/dev/null)
+    transform=$(jq -r '.transform' <<<"$edp" 2>/dev/null)
+    dpms=$(jq -r '.dpmsStatus' <<<"$edp" 2>/dev/null)
     if [ -f "$FLAG" ]; then
         if [ "$rot_active" = "active" ]; then
             ok "  └ 正在运行（平板模式）"
@@ -219,8 +222,11 @@ if systemctl --user is-enabled iio-hyprland.service >/dev/null 2>&1; then
         [ "$rot_active" = "active" ] \
             && bad "  └ PC 模式下却在跑 → 会把屏幕转成竖屏；看 unit 里的 ConditionPathExists" \
             || ok "  └ PC 模式：停用（固定横屏）"
-        # 熄屏时 transform 的变更延后到亮屏才生效，查到的值不作数
-        if [ "$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].dpmsStatus')" = "false" ]; then
+        # Hyprland 没在跑（比如从 SSH 跑、会话已退出）就没有方向可查，别报红。
+        # 熄屏时 transform 的变更延后到亮屏才生效，查到的值不作数。
+        if ! pgrep -x Hyprland >/dev/null 2>&1 || [ -z "$edp" ]; then
+            inf "  └ Hyprland 没在跑，屏幕方向不查"
+        elif [ "$dpms" = "false" ]; then
             inf "  └ 屏幕熄着，方向亮屏后再查"
         elif [ "$transform" = "0" ]; then
             ok "  └ 屏幕是横屏"

@@ -22,5 +22,8 @@ After=dev-typecover.device
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# 告诉 tablet-mode 是本单元在调它，别再反过来拉起本单元：否则手动 stop 时
+# ExecStop 看到 Cover 还接着，会把刚要停的服务又拉起来，stop 被取消。
+Environment=SURFACE_TYPECOVER_UNIT=1
 ExecStart=%h/.local/bin/tablet-mode auto
 ExecStop=%h/.local/bin/tablet-mode auto

@@ -5,7 +5,8 @@
 #  用法：
 #      surface-ctl rotate-lock       锁定/解锁屏幕自动旋转（躺着看视频/小说）
 #      surface-ctl page-keys         侧边音量键 ⇄ 翻页键（看小说用）
-#      surface-ctl osk-on-lock       锁屏 hook：平板模式下弹出虚拟键盘
+#      surface-ctl on-lock           锁屏 hook：记下锁屏状态；平板模式下弹出虚拟键盘
+#      surface-ctl on-unlock         解锁 hook：清掉锁屏状态、收起虚拟键盘
 #      surface-ctl idle-screen-off   空闲 hook：没在放声音才熄屏
 #      surface-ctl status            打印三项状态
 #
@@ -27,6 +28,12 @@
 #    Hyprland 锁屏时只画锁屏界面，但带 above_lock 规则的 layer 例外
 #    （mykeys.lua §4 给 wvkbd 加了 above_lock = 2：画在锁屏上面且能点）。
 #
+#  ■ 锁屏标记
+#    $XDG_RUNTIME_DIR/surface-locked，锁屏时建、解锁时删。mykeys.lua §7 的音量键
+#    查它：锁着时侧边键只调音量、不翻页。
+#    ★ 不能靠"有没有活动窗口"判断：锁屏时 Hyprland 仍报告锁屏背后那个窗口，
+#      于是翻页键会翻到锁屏后面的阅读器去（code review 发现）。
+#
 #  ■ 空闲熄屏为什么要查声音
 #    Firefox 放视频时【不】向合成器申请防熄屏（实测抖音播放中 inhibitingIdle
 #    = false），一动不动看长视频会被熄屏。所以只在没有未暂停的音频流时熄屏。
@@ -41,6 +48,7 @@ fi
 
 TABLET_FLAG="${XDG_STATE_HOME:-$HOME/.local/state}/surface-config/tablet.flag"
 PAGE_FLAG="${XDG_RUNTIME_DIR:-/tmp}/surface-page-keys"
+LOCK_FLAG="${XDG_RUNTIME_DIR:-/tmp}/surface-locked"
 ROT_UNIT="iio-hyprland.service"
 
 say() { notify-send -a surface -t 1500 "$1" "${2:-}" 2>/dev/null || true; }
@@ -71,11 +79,16 @@ case "${1:-}" in
             say "侧边键：翻页" "音量− 下一页 · 音量+ 上一页"
         fi
         ;;
-    osk-on-lock)
+    on-lock)
+        : > "$LOCK_FLAG"
         # 只在平板模式下弹：有 Type Cover 时直接敲，键盘挡着反而碍事
         [ -f "$TABLET_FLAG" ] || exit 0
         sleep 0.3                       # 等锁屏表面先铺好
         /usr/local/bin/wvkbd-toggle show
+        ;;
+    on-unlock)
+        rm -f "$LOCK_FLAG"
+        /usr/local/bin/wvkbd-toggle hide
         ;;
     idle-screen-off)
         audio_playing && exit 0

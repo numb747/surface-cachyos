@@ -119,7 +119,7 @@ hl.bind("SUPER + K", hl.dsp.exec_cmd("/usr/local/bin/wvkbd-toggle"))
 -- 锁屏上也能用虚拟键盘：Hyprland 锁屏时只画锁屏界面，但带 above_lock 的 layer
 -- 例外。2 = 画在锁屏上面【并且能点】（1 只画不能点）。
 -- 2026-09-27 实测：锁屏时点 wvkbd 的键，密码框里真的出现了圆点。
--- 键盘由 noctalia 的 session_locked hook 弹出（surface-ctl osk-on-lock）。
+-- 键盘由 noctalia 的 session_locked hook 弹出（surface-ctl on-lock）。
 hl.layer_rule({
     name       = "wvkbd-above-lock",
     match      = { namespace = "^wvkbd$" },
@@ -192,21 +192,26 @@ hl.bind("ALT + M",      thenHideOsk(hl.dsp.exec_cmd("/usr/local/bin/tablet-mode 
 --       io.open 一次是微秒级，按键时查不会有延迟。
 --
 --     ★ 锁屏时（locked = true 的 bind 仍会触发）不翻页、只调音量：
---       锁屏界面没有窗口可发，而且锁着时侧边键就该是音量键。
+--       锁着时侧边键就该是音量键。锁屏状态看 surface-ctl on-lock / on-unlock
+--       （noctalia 的锁屏 hook）维护的标记文件。
+--       不能靠 hl.get_active_window() == nil 判断：锁屏时它仍返回锁屏背后的
+--       窗口，翻页键会翻到锁屏后面去（code review 发现）。
 --
 --     binds.lua 里的同名 bind 要先 unbind，否则两个都触发（hl.bind 是叠加）。
 -- ────────────────────────────────────────────────────────────────────────────
-local pageFlag = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/surface-page-keys"
+local runDir   = os.getenv("XDG_RUNTIME_DIR") or "/tmp"
+local pageFlag = runDir .. "/surface-page-keys"
+local lockFlag = runDir .. "/surface-locked"
 
-local function pageKeysOn()
-    local f = io.open(pageFlag, "r")
+local function exists(path)
+    local f = io.open(path, "r")
     if f then f:close() return true end
     return false
 end
 
 local function volOrPage(volCmd, pageKey)
     return function()
-        if pageKeysOn() and hl.get_active_window() ~= nil then
+        if exists(pageFlag) and not exists(lockFlag) and hl.get_active_window() ~= nil then
             hl.dispatch(hl.dsp.send_shortcut({ mods = "", key = pageKey }))
         else
             hl.dispatch(hl.dsp.exec_cmd(noctCall .. volCmd))

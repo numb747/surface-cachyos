@@ -29,6 +29,31 @@ hl.config({
     },
 })
 
+-- ── 模式标识：平板模式下窗口边框变橙 ──────────────────────────────────────
+--
+--    顶栏做不了随模式变化的图标（noctalia v5 的 custom_button 图标/文字是静态的，
+--    动态标签是 v4 的功能，v5 没有；见 noctalia issue #4570）。
+--    用 TABLET_MODE（variables.lua）判断，与平板手势集是同一个开关，不会对不上。
+--    回 PC 模式 reload 时 decorations.lua 的默认绿色边框自然恢复。
+--
+--    ★ 必须在下面的 hyprgrass 检查【之前】：插件没加载时（比如 Hyprland 更新后
+--      还没重编插件）本文件在那里就 return 了，touch-tablet.lua 也不会被加载。
+--      手势可以没有，模式标识得有。早先写在 touch-tablet.lua 顶部，以为放在
+--      那个文件的插件检查之前就行 —— 其实根本走不到那个文件（code review 发现）。
+if TABLET_MODE then
+    hl.config({
+        general = {
+            border_size = 3,
+            col = {
+                active_border = {
+                    colors = { "rgba(ffa94dff)", "rgba(f76707ff)" },
+                    angle = 45,
+                },
+            },
+        },
+    })
+end
+
 if hl.plugin.hyprgrass == nil then
     return
 end

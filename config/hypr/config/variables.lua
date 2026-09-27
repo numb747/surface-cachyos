@@ -42,8 +42,15 @@ NUM_WPM = 4
 --
 -- ★ 为什么用文件而不是配置项：`hyprctl keyword` 对 Lua 配置不可用，也没有
 --   通用的变量读写 API；而 io 在配置加载时可用。见 docs/06 第三节。
+--
+-- ★ 目录规则必须和另外几处一致：tablet-mode / surface-ctl / wvkbd-toggle /
+--   doctor 用 ${XDG_STATE_HOME:-$HOME/.local/state}，iio-hyprland.service 用 %S
+--   （同一规则）。这里早先写死 ~/.local/state，设了 XDG_STATE_HOME 就会各看
+--   各的目录（code review 发现）。
 do
-    local fh = io.open(os.getenv("HOME") .. "/.local/state/surface-config/tablet.flag", "r")
+    local state = os.getenv("XDG_STATE_HOME")
+    if state == nil or state == "" then state = os.getenv("HOME") .. "/.local/state" end
+    local fh = io.open(state .. "/surface-config/tablet.flag", "r")
     TABLET_MODE = fh ~= nil
     if fh then fh:close() end
 end
