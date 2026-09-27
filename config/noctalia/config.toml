@@ -16,9 +16,9 @@ ui_scale = 1.20
 #   tray 改抽屉模式   —— v2rayN 等托盘图标收进一个按钮，不挤占宽度
 #   session → control_center：电源菜单在控制中心右上角也有，而控制中心是
 #     平板上的总入口（WiFi/蓝牙/亮度/勿扰都在里面），比电源按钮更常用
-#   加 osk / rotate-lock / lock 三个纯图标按钮（2026-09-27）——平板上最常按、
-#     又没有别的一键入口的三件事，定义见文件末尾 [widget.osk] 等。
-#     每个约 46px 宽，11 个 widget 在竖屏 912 宽里实测放得下。
+#   加 osk / rotate-lock / page-keys / lock 四个纯图标按钮（2026-09-27）——
+#     平板上最常按、又没有别的一键入口的几件事，定义见文件末尾 [widget.osk] 等。
+#     每个约 46px 宽，12 个 widget 在竖屏 912 宽里实测放得下。
 #
 # 尺寸：thickness 35 × scale 1.10 × ui_scale 1.20 ≈ 46 逻辑 px ≈ 9mm（267ppi、
 #   scale 2），刚好是手指点击目标的推荐下限，别再调小。
@@ -28,7 +28,7 @@ smart_auto_hide = false
 reserve_space = true
 start = [ "launcher", "clock" ]
 center = [ "workspaces" ]
-end = [ "tray", "osk", "rotate-lock", "notifications", "network", "battery", "volume", "lock", "control-center" ]
+end = [ "tray", "osk", "rotate-lock", "page-keys", "notifications", "network", "battery", "volume", "lock", "control-center" ]
 concave_edge_corners = true
 margin_edge = 0
 margin_ends = 0
@@ -198,17 +198,27 @@ color = "secondary"
     left = "exec /usr/local/bin/wvkbd-toggle"
     right = "exec /usr/local/bin/wvkbd-toggle hide"
 
-# 旋转锁：点 = 锁定/解锁自动旋转（躺着看视频/小说）。
-# 长按 = 侧边音量键切成翻页键（音量− 下一页，音量+ 上一页），再长按切回。
+# 旋转锁：点 = 锁定/解锁自动旋转（躺着看视频/小说）。PC 模式固定横屏，点了只提示。
 [widget.rotate-lock]
 type = "custom_button"
 glyph = "rotate"
-tooltip = "点：锁定旋转 · 长按：音量键翻页"
+tooltip = "锁定 / 解锁自动旋转"
 color = "secondary"
 
     [widget.rotate-lock.actions]
     left = "exec /usr/local/bin/surface-ctl rotate-lock"
-    right = "exec /usr/local/bin/surface-ctl page-keys"
+
+# 翻页键：点 = 侧边音量键 ⇄ 翻页键（音量− 下一页，音量+ 上一页），再点切回。
+# 切完弹通知说明当前是哪种（图标是静态的，看不出状态）。
+# ★ 早先挂在旋转锁按钮的长按上，长按在触屏上不好按准，改成单独按钮点击切换。
+[widget.page-keys]
+type = "custom_button"
+glyph = "book"
+tooltip = "侧边音量键 ⇄ 翻页键"
+color = "secondary"
+
+    [widget.page-keys.actions]
+    left = "exec /usr/local/bin/surface-ctl page-keys"
 
 # 锁屏：平板模式下锁屏上会自动弹出虚拟键盘（见下面 [hooks]）。
 # 长按 = 电源菜单（关机/重启/注销）。
