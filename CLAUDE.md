@@ -87,6 +87,13 @@ Hyprland 进程的 PATH 是 `/usr/local/sbin:/usr/local/bin:/usr/bin:...`，
 - Lua 配置里调脚本用 **`/usr/local/bin/...` 绝对路径**
 - `/usr/local/bin` 里的文件由 `./install.sh system` 打印 sudo 命令手工装
 
+### 4. 核显不能硬解 AV1，无风扇机身软解几分钟就烫
+
+UHD 620 只硬解 H.264 / HEVC / VP9。Firefox 已在 `user.js` 里关掉 AV1
+（`media.av1.enabled = false`），让网站回退到能硬解的格式。
+用户说"发烫""卡"时**先查 Firefox 的 RDD 进程**，别先怀疑代理（sing-box 实测几乎不占 CPU）。
+`user.js` 不在 `manifest.map` 里，重建 Firefox 配置后要手补。详见 `docs/04` 第 11 条。
+
 ## 约定
 
 - **`manifest.map` 是单一事实来源**，`install.sh` / `uninstall.sh` / `doctor.sh`
