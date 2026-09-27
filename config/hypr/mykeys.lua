@@ -8,7 +8,8 @@
 --
 --  删掉的部分（想恢复就从 ~/cachyOS-config/config/hypr/mykeys.lua 抄）：
 --    §1b  双平面骨架（rack）          —— 抽屉架导航，纯键盘操作
---    §2/4/4b/4c  CTRL+ALT+HJKL、ALT+[/]、CTRL+2/3 等导航和弦
+--         （ALT+S / ALT+[/] / CTRL+1-4 以单格抽屉的简化形式恢复在本文件 §8）
+--    §2   CTRL+ALT+HJKL 焦点导航和弦
 --    §5   分屏终端（ALT+\）            —— 平板不这么用
 --    §6   鼠标指针管理                 —— 触屏无常驻指针，不变式不成立
 --    §10  抽屉架（rack）实现体         —— 同 §1b
@@ -95,7 +96,7 @@ hl.bind("ALT + C",       hl.dsp.exec_cmd(noctCall .. "panel-toggle control-cente
 hl.bind("ALT + N",       hl.dsp.exec_cmd(noctCall .. "panel-toggle control-center notifications"))
 hl.bind("ALT + V",       hl.dsp.exec_cmd(noctCall .. "panel-toggle clipboard"))
 -- 壁纸面板原来在 ALT + W，让给了 §6 的关窗口；壁纸仍有 binds.lua 的 SUPER + SHIFT + W
-hl.bind("ALT + S",       hl.dsp.exec_cmd(noctCall .. "settings-toggle"))
+-- 设置面板原来在 ALT + S，让给了 §8 的抽屉（PC 版的老键位）；设置仍有 binds.lua 的 SUPER + Z
 hl.bind("ALT + L",       hl.dsp.exec_cmd(noctCall .. "session lock"))
 hl.bind("ALT + Q",       hl.dsp.exec_cmd(noctCall .. "panel-toggle session"))
 
@@ -223,3 +224,85 @@ hl.unbind("XF86AudioLowerVolume")
 hl.unbind("XF86AudioRaiseVolume")
 hl.bind("XF86AudioLowerVolume", volOrPage("volume-down", "Next"),  { locked = true, repeating = true })
 hl.bind("XF86AudioRaiseVolume", volOrPage("volume-up",   "Prior"), { locked = true, repeating = true })
+
+
+-- ────────────────────────────────────────────────────────────────────────────
+--  8. 切桌面与抽屉（PC 版 §4/4b/4c/10 的老键位，接着 Type Cover 时用）
+--
+--     ALT + [ / ]          上一个 / 下一个桌面
+--     ALT + SHIFT + [ / ]  带着当前窗口去上一个 / 下一个桌面
+--     CTRL + 2 / 3         同 ALT + [ / ]，左手单手按
+--     CTRL + 1 / 4         第一个 / 最后一个桌面
+--     ALT + S              开 / 关抽屉
+--     ALT + SHIFT + S      当前窗口放进抽屉；焦点在抽屉里时反过来拿回桌面
+--
+--     ★ 和 PC 版的区别：PC 版是【多格】抽屉架（special:rack1/rack2/…），抽屉
+--       开着时上面这些键切的是抽屉格。这里是【单格】抽屉（就是 binds.lua 里
+--       SUPER+S 那个 special:special），切桌面的键始终切桌面。
+--       为什么不搬多格版：~250 行引擎；而且 tablet-rescue（双指长按救援）会把
+--       抽屉里的窗口全搬回桌面 1，多格抽屉的分组在平板上一救援就散了。
+--
+--     ★ 不违反"触屏不切抽屉"（CLAUDE.md 硬约束 #2）：那条管手势误触。
+--       这里要按两个指定的键；平板上用虚拟键盘点 Alt 再点 S 也一样。
+--       真在平板上被抽屉盖住了，双指长按救援会关掉它。
+--
+--     ⚠ CTRL + 数字会被合成器截获，应用收不到：浏览器的"切到第 N 个标签页"、
+--       VS Code 的"聚焦第 N 个分栏"就用不了了（PC 版一直这么用，用户要回来的）。
+--       被咬到了就改成 CONTROL + ALT + 数字。kitty 的切标签是 CTRL+SHIFT+数字，
+--       不受影响。binds.lua 里没有裸 CTRL+数字，不用 unbind。
+--
+--     每个键之后也 hide 虚拟键盘，理由同 §6。
+-- ────────────────────────────────────────────────────────────────────────────
+hl.bind("ALT + bracketleft",          thenHideOsk(hl.dsp.focus({ workspace = "m-1" })))
+hl.bind("ALT + bracketright",         thenHideOsk(hl.dsp.focus({ workspace = "m+1" })))
+hl.bind("ALT + SHIFT + bracketleft",  thenHideOsk(hl.dsp.window.move({ workspace = "m-1" })))
+hl.bind("ALT + SHIFT + bracketright", thenHideOsk(hl.dsp.window.move({ workspace = "m+1" })))
+hl.bind("CONTROL + 2",                thenHideOsk(hl.dsp.focus({ workspace = "m-1" })))
+hl.bind("CONTROL + 3",                thenHideOsk(hl.dsp.focus({ workspace = "m+1" })))
+
+-- 第一个 / 最后一个桌面。不能写死编号 1 和 4：本配置是纯动态工作区，编号会
+-- 留洞（剩 1、3、7 是常态），写死会凭空造出一个新桌面。所以实时扫现存工作区。
+-- w.id > 0：hl.get_workspaces() 会返回 special 工作区（id 为负），不滤掉的话
+-- CTRL+1 会一头扎进抽屉。
+local function edgeWs(wantMax)
+    local mon  = hl.get_active_monitor()
+    local best = nil
+    for _, w in ipairs(hl.get_workspaces()) do
+        local sameMon = (mon == nil) or (w.monitor == nil) or (w.monitor.name == mon.name)
+        if w.id > 0 and not w.special and sameMon then
+            if best == nil or (wantMax and w.id > best) or (not wantMax and w.id < best) then
+                best = w.id
+            end
+        end
+    end
+    return tostring(best or 1)
+end
+
+hl.bind("CONTROL + 1", function()
+    hl.dispatch(hl.dsp.focus({ workspace = edgeWs(false) }))
+    hl.dispatch(oskHide)
+end)
+hl.bind("CONTROL + 4", function()
+    hl.dispatch(hl.dsp.focus({ workspace = edgeWs(true) }))
+    hl.dispatch(oskHide)
+end)
+
+-- 抽屉。toggle_special() 不带名字 = special:special，与 binds.lua 的 SUPER+S 同一个。
+hl.bind("ALT + S", thenHideOsk(hl.dsp.workspace.toggle_special()))
+
+-- 放进 / 拿出。
+--   ⚠ window.move 进 special 要写全名 "special:special"；默认会把抽屉拉出来并
+--     跟过去，follow = false 才是"原地收走"（PC 版 §10 约束 2、3，实测踩过）。
+--   焦点在抽屉里 → 放回底下的桌面（抽屉浮着时 active_workspace 仍是那个桌面）。
+hl.bind("ALT + SHIFT + S", function()
+    local w   = hl.get_active_window()
+    local mon = hl.get_active_monitor()
+    if w and w.workspace and w.workspace.special then
+        if mon and mon.active_workspace then
+            hl.dispatch(hl.dsp.window.move({ workspace = mon.active_workspace.id, window = w }))
+        end
+    elseif w then
+        hl.dispatch(hl.dsp.window.move({ workspace = "special:special", window = w, follow = false }))
+    end
+    hl.dispatch(oskHide)
+end)
