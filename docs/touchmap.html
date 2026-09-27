@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>触屏地图</title>
+<!--
+  触屏地图：用手指在屏幕上乱划，页面把"划得通"的地方涂绿、"断开"的地方标红，
+  攒多了就是一张这块屏幕的死区图，用来找划动时该避开的位置。
+
+  源文件：surface-cachyos/docs/touchmap.html，./install.sh tablet 装到
+  ~/.local/share/surface-cachyos/touchmap.html。纯本地页面，不联网、不上传。
+
+  判定"断开"：同一根手指抬起后 150ms 内又在 60px 内落下 —— 手指并没有离开，
+  是触摸层把它弄丢了（与 docs/08 分析用的阈值一致）。断点记在抬起的位置。
+-->
+<style>
+  :root {
+    --bg: #101218; --fg: #e6e8ef; --muted: #9aa1b5; --panel: rgba(24,27,38,.92);
+    --line: #2e3345; --btn: #2b3043; --ok: 46, 204, 113; --bad: 255, 71, 87;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 17px/1.45 "Noto Sans CJK SC", system-ui, sans-serif; overflow: hidden;
+    touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  #bar { position: fixed; left: 0; right: 0; top: 0; z-index: 2; background: var(--panel);
+    border-bottom: 1px solid var(--line); padding: 10px 14px; display: flex; flex-wrap: wrap;
+    gap: 8px 12px; align-items: center; }
+  #bar b { font-size: 18px; }
+  #stats { color: var(--muted); flex: 1 1 auto; min-width: 0; }
+  #btns { display: flex; gap: 8px; margin-left: auto; }
+  #stats .bad { color: rgb(var(--bad)); font-weight: 600; }
+  #stats .ok  { color: rgb(var(--ok)); font-weight: 600; }
+  button { font: inherit; color: var(--fg); background: var(--btn); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 16px; min-height: 44px; }
+  button.on { outline: 2px solid rgb(var(--ok)); }
+  #help { position: fixed; inset: 80px 16px 16px; margin: auto; height: fit-content; z-index: 1;
+    max-width: 520px; max-height: calc(100vh - 96px); overflow: hidden; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; pointer-events: none; }
+  #help h2 { margin: 0 0 8px; font-size: 20px; }
+  #help p { margin: 6px 0; color: var(--muted); }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="bar">
+  <b>触屏地图</b>
+  <span id="stats">划几下试试</span>
+  <span id="btns"><button id="grid">网格</button><button id="clear">清空</button></span>
+</div>
+<div id="help">
+  <h2>用手指到处划</h2>
+  <p><span class="sw" style="background:rgb(46,204,113)"></span>绿色 = 手指走过、触摸没断</p>
+  <p><span class="sw" style="background:rgb(255,71,87)"></span>红色 = 这里断开了（手指没抬，触摸却丢了）</p>
+  <p>横着、竖着、斜着都划一遍，红点扎堆的地方就是死区。<br>刷视频、翻页时，让手指的起点和终点都避开那里。</p>
+  <p>结果留在本机浏览器里，关掉再开还在；换了方向（横/竖屏）会分开记。</p>
+</div>
+<script>
+(() => {
+  const GAP_MS = 150, GAP_PX = 60, CELL = 24;     // 断开判定 / 热图格子（CSS px）
+  const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+  const statsEl = document.getElementById("stats"), help = document.getElementById("help");
+  const gridBtn = document.getElementById("grid");
+  let W = 0, H = 0, dpr = 1, showGrid = false;
+  let cover = new Map(), breaks = [];             // "cx,cy" → 走过次数；[{x,y}]
+  let strokes = 0, lastUp = null;                 // lastUp: {x,y,t} 最近一次抬起
+  const live = new Map();                         // pointerId → 上一个点
+
+  const key = () => `touchmap:${screen.width > screen.height ? "landscape" : "portrait"}`;
+  function save() {
+    try { localStorage.setItem(key(), JSON.stringify({ cover: [...cover], breaks, strokes, W, H })); } catch (_) {}
+  }
+  function load() {
+    cover = new Map(); breaks = []; strokes = 0;
+    try {
+      const d = JSON.parse(localStorage.getItem(key()) || "null");
+      if (d && d.W === W && d.H === H) { cover = new Map(d.cover); breaks = d.breaks; strokes = d.strokes; }
+    } catch (_) {}
+  }
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    load(); draw();
+  }
+
+  function mark(x, y) {
+    const k = `${Math.floor(x / CELL)},${Math.floor(y / CELL)}`;
+    cover.set(k, (cover.get(k) || 0) + 1);
+  }
+  function markLine(a, b) {                        // 两个采样点之间也涂上，快划不留空洞
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / (CELL / 2)));
+    for (let i = 1; i <= n; i++) mark(a.x + (b.x - a.x) * i / n, a.y + (b.y - a.y) * i / n);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    for (const [k, v] of cover) {
+      const [cx, cy] = k.split(",").map(Number);
+      ctx.fillStyle = `rgba(46,204,113,${Math.min(0.15 + v * 0.06, 0.55)})`;
+      ctx.fillRect(cx * CELL, cy * CELL, CELL, CELL);
+    }
+    for (const b of breaks) {
+      ctx.fillStyle = "rgba(255,71,87,.28)"; ctx.beginPath(); ctx.arc(b.x, b.y, 22, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgb(255,71,87)"; ctx.beginPath(); ctx.arc(b.x, b.y, 5, 0, 7); ctx.fill();
+    }
+    if (showGrid) drawGrid();
+    const rate = strokes ? Math.round(breaks.length / strokes * 100) : 0;
+    statsEl.innerHTML = strokes
+      ? `${strokes} 笔 · <span class="${breaks.length ? "bad" : "ok"}">断开 ${breaks.length} 次</span>（${rate}%）`
+      : "划几下试试";
+  }
+
+  function drawGrid() {                            // 1cm 网格，按 96 CSS px/in 算（与 Hyprland scale 无关）
+    const cm = 96 / 2.54;
+    ctx.strokeStyle = "rgba(255,255,255,.07)"; ctx.lineWidth = 1;
+    ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.font = "11px system-ui";
+    for (let x = 0, i = 0; x < W; x += cm, i++) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+      if (i % 5 === 0) ctx.fillText(i, x + 2, H - 4);
+    }
+    for (let y = 0, i = 0; y < H; y += cm, i++) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      if (i % 5 === 0 && i) ctx.fillText(i, 2, y - 2);
+    }
+  }
+
+  function onDown(e) {
+    if (e.target.closest("#bar")) return;
+    help.style.display = "none";
+    const p = { x: e.clientX, y: e.clientY, t: e.timeStamp };
+    if (lastUp && p.t - lastUp.t < GAP_MS && Math.hypot(p.x - lastUp.x, p.y - lastUp.y) < GAP_PX) {
+      breaks.push({ x: lastUp.x, y: lastUp.y });   // 同一笔被切断：记在断开的位置
+    } else {
+      strokes++;
+    }
+    lastUp = null; live.set(e.pointerId, p); mark(p.x, p.y); draw();
+  }
+  function onMove(e) {
+    const a = live.get(e.pointerId); if (!a) return;
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    let prev = a;
+    for (const c of evs) { const b = { x: c.clientX, y: c.clientY }; markLine(prev, b); prev = b; }
+    live.set(e.pointerId, prev); draw();
+  }
+  function onUp(e) {
+    const a = live.get(e.pointerId); if (!a) return;
+    live.delete(e.pointerId);
+    lastUp = { x: e.clientX, y: e.clientY, t: e.timeStamp };
+    save();
+  }
+
+  addEventListener("pointerdown", onDown);
+  addEventListener("pointermove", onMove);
+  addEventListener("pointerup", onUp);
+  addEventListener("pointercancel", onUp);
+  addEventListener("contextmenu", e => e.preventDefault());   // 长按别弹菜单打断
+  addEventListener("resize", resize);
+  document.getElementById("clear").onclick = () => {
+    cover = new Map(); breaks = []; strokes = 0; lastUp = null; save(); draw();
+  };
+  gridBtn.onclick = () => { showGrid = !showGrid; gridBtn.classList.toggle("on", showGrid); draw(); };
+  resize();
+})();
+</script>
+</body>
+</html>

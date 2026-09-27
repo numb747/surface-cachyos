@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  surface-ctl —— 顶栏按钮、noctalia hook、侧边键背后的小动作
+#
+#  用法：
+#      surface-ctl rotate-lock       锁定/解锁屏幕自动旋转（躺着看视频/小说）
+#      surface-ctl page-keys         侧边音量键 ⇄ 翻页键（看小说用）
+#      surface-ctl osk-on-lock       锁屏 hook：平板模式下弹出虚拟键盘
+#      surface-ctl idle-screen-off   空闲 hook：没在放声音才熄屏
+#      surface-ctl status            打印三项状态
+#
+#  ■ 旋转锁
+#    自动旋转 = systemd 用户服务 iio-hyprland（docs/05）。停掉它，屏幕停在当前
+#    方向；再启动，它读一次传感器、立刻转到当前朝向。状态就是服务本身的
+#    active/inactive，不另存标记。服务是 enable 的，重启后照常自启，不会"忘了解"。
+#
+#  ■ 翻页键
+#    标记文件在 $XDG_RUNTIME_DIR 下，mykeys.lua 的音量键 bind 每次按下时查它：
+#    有 → 给当前窗口发 PageDown/PageUp；没有 → 照常调音量。重启即清空，
+#    回到"音量键就是音量键"。
+#
+#  ■ 锁屏上的虚拟键盘
+#    Hyprland 锁屏时只画锁屏界面，但带 above_lock 规则的 layer 例外
+#    （mykeys.lua §4 给 wvkbd 加了 above_lock = 2：画在锁屏上面且能点）。
+#
+#  ■ 空闲熄屏为什么要查声音
+#    Firefox 放视频时【不】向合成器申请防熄屏（实测抖音播放中 inhibitingIdle
+#    = false），一动不动看长视频会被熄屏。所以只在没有未暂停的音频流时熄屏。
+# ============================================================================
+set -uo pipefail
+
+# 从 noctalia / Hyprland 里 exec 出来时环境不一定齐全
+if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+    sig="$(ls -t "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/" 2>/dev/null | head -1)"
+    [ -n "$sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$sig"
+fi
+
+TABLET_FLAG="${XDG_STATE_HOME:-$HOME/.local/state}/surface-config/tablet.flag"
+PAGE_FLAG="${XDG_RUNTIME_DIR:-/tmp}/surface-page-keys"
+ROT_UNIT="iio-hyprland.service"
+
+say() { notify-send -a surface -t 1500 "$1" "${2:-}" 2>/dev/null || true; }
+
+rotate_locked() { ! systemctl --user is-active --quiet "$ROT_UNIT"; }
+
+# 有没有正在出声的音频流（Corked: no = 没暂停）
+audio_playing() { pactl list sink-inputs 2>/dev/null | grep -q 'Corked: no'; }
+
+case "${1:-}" in
+    rotate-lock)
+        if rotate_locked; then
+            systemctl --user start "$ROT_UNIT"
+            say "自动旋转：开"
+        else
+            systemctl --user stop "$ROT_UNIT"
+            say "自动旋转：已锁定" "屏幕停在当前方向"
+        fi
+        ;;
+    page-keys)
+        if [ -f "$PAGE_FLAG" ]; then
+            rm -f "$PAGE_FLAG"
+            say "侧边键：音量"
+        else
+            : > "$PAGE_FLAG"
+            say "侧边键：翻页" "音量− 下一页 · 音量+ 上一页"
+        fi
+        ;;
+    osk-on-lock)
+        # 只在平板模式下弹：有 Type Cover 时直接敲，键盘挡着反而碍事
+        [ -f "$TABLET_FLAG" ] || exit 0
+        sleep 0.3                       # 等锁屏表面先铺好
+        /usr/local/bin/wvkbd-toggle show
+        ;;
+    idle-screen-off)
+        audio_playing && exit 0
+        noctalia msg dpms-off >/dev/null 2>&1
+        ;;
+    status)
+        echo "旋转:   $(rotate_locked && echo 已锁定 || echo 自动)"
+        echo "侧边键: $([ -f "$PAGE_FLAG" ] && echo 翻页 || echo 音量)"
+        echo "声音:   $(audio_playing && echo 在放 || echo 没有)"
+        ;;
+    *)
+        sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+        exit 2
+        ;;
+esac

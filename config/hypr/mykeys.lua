@@ -116,6 +116,16 @@ hl.bind("ALT + Tab",     hl.dsp.exec_cmd(noctCall .. "window-switcher"))
 -- ────────────────────────────────────────────────────────────────────────────
 hl.bind("SUPER + K", hl.dsp.exec_cmd("/usr/local/bin/wvkbd-toggle"))
 
+-- 锁屏上也能用虚拟键盘：Hyprland 锁屏时只画锁屏界面，但带 above_lock 的 layer
+-- 例外。2 = 画在锁屏上面【并且能点】（1 只画不能点）。
+-- 2026-09-27 实测：锁屏时点 wvkbd 的键，密码框里真的出现了圆点。
+-- 键盘由 noctalia 的 session_locked hook 弹出（surface-ctl osk-on-lock）。
+hl.layer_rule({
+    name       = "wvkbd-above-lock",
+    match      = { namespace = "^wvkbd$" },
+    above_lock = 2,
+})
+
 
 -- ────────────────────────────────────────────────────────────────────────────
 --  5. 救援
@@ -168,3 +178,43 @@ hl.bind("ALT + W",      thenHideOsk(hl.dsp.window.close()))
 hl.bind("ALT + T",      thenHideOsk(hl.dsp.focus({ workspace = "emptym" })))
 hl.bind("ALT + Return", thenHideOsk(hl.dsp.window.fullscreen()))
 hl.bind("ALT + M",      thenHideOsk(hl.dsp.exec_cmd("/usr/local/bin/tablet-mode toggle")))
+
+
+-- ────────────────────────────────────────────────────────────────────────────
+--  7. 侧边音量键 → 翻页（看小说）
+--
+--     顶栏的"翻页"按钮（surface-ctl page-keys）切换一个标记文件；这里的音量键
+--     每次按下时查它：有 → 给当前窗口发 PageDown/PageUp，没有 → 照常调音量。
+--     音量− = 下一页（拇指往下按 = 往下读），音量+ = 上一页。
+--
+--     ★ 为什么在 Lua 里每次查文件，而不是切换时 hyprctl reload 换 bind：
+--       reload 会把 tablet-mode 的状态、手势全部重载一遍，翻页键开关不值得。
+--       io.open 一次是微秒级，按键时查不会有延迟。
+--
+--     ★ 锁屏时（locked = true 的 bind 仍会触发）不翻页、只调音量：
+--       锁屏界面没有窗口可发，而且锁着时侧边键就该是音量键。
+--
+--     binds.lua 里的同名 bind 要先 unbind，否则两个都触发（hl.bind 是叠加）。
+-- ────────────────────────────────────────────────────────────────────────────
+local pageFlag = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/surface-page-keys"
+
+local function pageKeysOn()
+    local f = io.open(pageFlag, "r")
+    if f then f:close() return true end
+    return false
+end
+
+local function volOrPage(volCmd, pageKey)
+    return function()
+        if pageKeysOn() and hl.get_active_window() ~= nil then
+            hl.dispatch(hl.dsp.send_shortcut({ mods = "", key = pageKey }))
+        else
+            hl.dispatch(hl.dsp.exec_cmd(noctCall .. volCmd))
+        end
+    end
+end
+
+hl.unbind("XF86AudioLowerVolume")
+hl.unbind("XF86AudioRaiseVolume")
+hl.bind("XF86AudioLowerVolume", volOrPage("volume-down", "Next"),  { locked = true, repeating = true })
+hl.bind("XF86AudioRaiseVolume", volOrPage("volume-up",   "Prior"), { locked = true, repeating = true })

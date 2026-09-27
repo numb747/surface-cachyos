@@ -48,6 +48,11 @@ tablet/tablet-mode                        ~/.local/bin/tablet-mode
 tablet/tablet-rescue                      ~/.local/bin/tablet-rescue
 # 平板操作速查页，Firefox 收藏这个路径。改了手势/键位要同步改它。
 docs/cheatsheet.html                      ~/.local/share/surface-cachyos/cheatsheet.html
+# 顶栏按钮 / noctalia hook / 音量键翻页背后的小动作（旋转锁、锁屏键盘、空闲熄屏）。
+# noctalia 与 Hyprland 调的是 /usr/local/bin 那份（它们的 PATH 里没有 ~/.local/bin）。
+tablet/surface-ctl                        ~/.local/bin/surface-ctl
+# 触屏地图：划一划就标出这块屏幕哪里断触，Firefox 收藏这个路径。
+docs/touchmap.html                        ~/.local/share/surface-cachyos/touchmap.html
 
 #@module osk
 # 虚拟键盘的信号封装。wvkbd 用 SIGUSR1/2/SIGRTMIN 控制显隐，这里包成

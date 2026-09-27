@@ -41,7 +41,7 @@ widget_order = [ "lockscreen-login-box@eDP-1", "lockscreen-login-box@DP-1" ]
     box_height = 196.0
     box_width = 810.0
     cx = 456.0
-    cy = 1095.0
+    cy = 547.2
     output = "eDP-1"
     placement_height = 1368.0
     placement_width = 912.0
@@ -82,3 +82,5 @@ path = "/home/charlen/Pictures/Wallpapers/tokyonight/D-ASCII/a1-紫调少女.png
 
 [wallpaper.monitors.DP-1]
 path = "/home/charlen/Pictures/Wallpapers/tokyonight/D-ASCII/a1-紫调少女.png"
+[widget.tray]
+pinned = [ "Fcitx", "To4IIWguER" ]

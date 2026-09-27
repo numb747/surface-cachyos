@@ -136,6 +136,7 @@ mod_tablet() {
   ★ 下面这条要 sudo，请自己跑（install.sh 不代跑）：
       sudo install -m755 ~/.local/bin/tablet-mode   /usr/local/bin/tablet-mode
       sudo install -m755 ~/.local/bin/tablet-rescue /usr/local/bin/tablet-rescue
+      sudo ln -sf ~/.local/bin/surface-ctl /usr/local/bin/surface-ctl
 EOS
 }
 
@@ -210,6 +211,7 @@ mod_system() {
   3) /usr/local/bin 的两份真文件（udev 的 RUN 要用，见 tablet 模块）
        sudo install -m755 ~/.local/bin/tablet-mode   /usr/local/bin/tablet-mode
        sudo install -m755 ~/.local/bin/tablet-rescue /usr/local/bin/tablet-rescue
+       sudo ln -sf ~/.local/bin/surface-ctl /usr/local/bin/surface-ctl   # 顶栏按钮用，软链即可
 
   4) 内核与传感器栈
        ~/surface-cachyos/setup/01-surface-kernel.sh          # 打印命令；加 --run 才执行

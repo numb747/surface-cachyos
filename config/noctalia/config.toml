@@ -8,7 +8,7 @@ ui_scale = 1.20
 #   浏览器的标签栏（实测：窗口 y=10 起，bar 占 0~46）。
 # ★ auto_hide 仍然关：它靠"指针到顶部边缘"触发，触屏没有常驻指针，没法用。
 #
-# widget 取舍（PC 版 16 个 → 这里 8 个，912 宽塞不下）：
+# widget 取舍（PC 版 16 个 → 这里 11 个，912 宽塞不下）：
 #   删 active_window  —— 和窗口自己的标题栏重复，还最占宽度
 #   删 temp/sysmon×2  —— PC 的监控需求；要看点控制中心里的 System 页
 #   删 media          —— 控制中心首页就有播放卡片
@@ -16,6 +16,9 @@ ui_scale = 1.20
 #   tray 改抽屉模式   —— v2rayN 等托盘图标收进一个按钮，不挤占宽度
 #   session → control_center：电源菜单在控制中心右上角也有，而控制中心是
 #     平板上的总入口（WiFi/蓝牙/亮度/勿扰都在里面），比电源按钮更常用
+#   加 osk / rotate-lock / lock 三个纯图标按钮（2026-09-27）——平板上最常按、
+#     又没有别的一键入口的三件事，定义见文件末尾 [widget.osk] 等。
+#     每个约 46px 宽，11 个 widget 在竖屏 912 宽里实测放得下。
 #
 # 尺寸：thickness 35 × scale 1.10 × ui_scale 1.20 ≈ 46 逻辑 px ≈ 9mm（267ppi、
 #   scale 2），刚好是手指点击目标的推荐下限，别再调小。
@@ -25,7 +28,7 @@ smart_auto_hide = false
 reserve_space = true
 start = [ "launcher", "clock" ]
 center = [ "workspaces" ]
-end = [ "tray", "notifications", "network", "battery", "volume", "control-center" ]
+end = [ "tray", "osk", "rotate-lock", "notifications", "network", "battery", "volume", "lock", "control-center" ]
 concave_edge_corners = true
 margin_edge = 0
 margin_ends = 0
@@ -179,3 +182,61 @@ capsule_fill = "on_primary"
 inactive_pill_size = 1.0
 pill_scale = 0.80
 show_labels = false
+
+# ── 平板快捷按钮（custom_button）───────────────────────────────────────────
+# 动作写 /usr/local/bin 的绝对路径：noctalia 的 PATH 里没有 ~/.local/bin（docs/07）。
+# 右键都给了"次要动作"，手指长按在 noctalia 里等于右键。
+
+# 虚拟键盘：点 = 显示/隐藏。PC 模式下 wvkbd-toggle 自己不弹（docs/03）。
+[widget.osk]
+type = "custom_button"
+glyph = "keyboard"
+tooltip = "虚拟键盘"
+color = "secondary"
+
+    [widget.osk.actions]
+    left = "exec /usr/local/bin/wvkbd-toggle"
+    right = "exec /usr/local/bin/wvkbd-toggle hide"
+
+# 旋转锁：点 = 锁定/解锁自动旋转（躺着看视频/小说）。
+# 长按 = 侧边音量键切成翻页键（音量− 下一页，音量+ 上一页），再长按切回。
+[widget.rotate-lock]
+type = "custom_button"
+glyph = "rotate"
+tooltip = "点：锁定旋转 · 长按：音量键翻页"
+color = "secondary"
+
+    [widget.rotate-lock.actions]
+    left = "exec /usr/local/bin/surface-ctl rotate-lock"
+    right = "exec /usr/local/bin/surface-ctl page-keys"
+
+# 锁屏：平板模式下锁屏上会自动弹出虚拟键盘（见下面 [hooks]）。
+# 长按 = 电源菜单（关机/重启/注销）。
+[widget.lock]
+type = "custom_button"
+glyph = "lock"
+tooltip = "锁屏 · 长按：电源菜单"
+color = "secondary"
+
+    [widget.lock.actions]
+    left = "session lock"
+    right = "panel-toggle session"
+
+# ── 事件 hook ──────────────────────────────────────────────────────────────
+# 锁屏后在平板模式下弹出虚拟键盘（wvkbd 有 above_lock 规则，画在锁屏之上，
+# 见 mykeys.lua §4）；解锁后收起。
+[hooks]
+session_locked = "/usr/local/bin/surface-ctl osk-on-lock"
+session_unlocked = "/usr/local/bin/wvkbd-toggle hide"
+
+# ── 空闲 ───────────────────────────────────────────────────────────────────
+# 只做"熄屏"，不自动锁屏：锁屏后要输密码，平板上不值得（手动锁屏走顶栏按钮）。
+# 熄屏也跳过正在出声的时候：Firefox 放视频不申请防熄屏，一动不动看长视频会被熄
+# （surface-ctl idle-screen-off 查 pactl 里有没有未暂停的流）。
+# 碰一下屏幕就亮：resume_command 把显示器打开。
+[idle.behavior.screen-off]
+timeout = 300
+action = "command"
+command = "/usr/local/bin/surface-ctl idle-screen-off"
+resume_command = "noctalia msg dpms-on"
+enabled = true

@@ -234,6 +234,19 @@ for b in tablet-mode tablet-rescue; do
     fi
 done
 
+# surface-ctl：顶栏按钮、锁屏 hook、空闲熄屏都调 /usr/local/bin 这份（noctalia 的
+# PATH 里没有 ~/.local/bin）。软链即可，指向 ~/.local/bin 就永远一致。
+if [ -x /usr/local/bin/surface-ctl ]; then
+    if cmp -s "$HOME/.local/bin/surface-ctl" "$(readlink -f /usr/local/bin/surface-ctl)"; then
+        ok "/usr/local/bin/surface-ctl（顶栏按钮用）与仓库一致"
+    else
+        bad "/usr/local/bin/surface-ctl 与 ~/.local/bin/surface-ctl 不一致"
+    fi
+else
+    bad "/usr/local/bin/surface-ctl 不存在 → 顶栏的旋转/锁屏按钮、锁屏键盘、空闲熄屏都不工作"
+    inf "  修：sudo ln -sf ~/.local/bin/surface-ctl /usr/local/bin/surface-ctl"
+fi
+
 # Type Cover 检测：和 tablet-mode 同一套 VID/PID 逻辑
 COVER_VID="${SURFACE_COVER_VID:-045e}"
 COVER_PID="${SURFACE_COVER_PID:-09c0}"

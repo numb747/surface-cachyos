@@ -90,7 +90,7 @@ cat <<'EOS'
 ── 这些不在本仓管理范围内，需要手工处理 ─────────────────────────────────
 
   1) sudo 装的副本（本仓不代跑，也不代卸）：
-       sudo rm -f /usr/local/bin/{tablet-mode,tablet-rescue,wvkbd-toggle}
+       sudo rm -f /usr/local/bin/{tablet-mode,tablet-rescue,wvkbd-toggle,surface-ctl}
        sudo rm -f /etc/udev/rules.d/70-surface-tablet-mode.rules
        sudo rm -f /etc/udev/rules.d/71-surface-ipts-ignore-raw.rules
        sudo rm -rf /etc/systemd/system/iptsd@.service.d
