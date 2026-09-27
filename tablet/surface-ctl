@@ -9,10 +9,14 @@
 #      surface-ctl idle-screen-off   空闲 hook：没在放声音才熄屏
 #      surface-ctl status            打印三项状态
 #
-#  ■ 旋转锁
+#  ■ 旋转锁（只在平板模式下有意义）
 #    自动旋转 = systemd 用户服务 iio-hyprland（docs/05）。停掉它，屏幕停在当前
-#    方向；再启动，它读一次传感器、立刻转到当前朝向。状态就是服务本身的
-#    active/inactive，不另存标记。服务是 enable 的，重启后照常自启，不会"忘了解"。
+#    方向。状态就是服务本身的 active/inactive，不另存标记。服务是 enable 的，
+#    重启后照常自启，不会"忘了解"。
+#    解锁走 `tablet-mode on`（模式已是平板时它只做"起服务 + 按传感器转过去"）：
+#    ★ 光 start 服务【不会】转到当前朝向 —— iio-hyprland 启动时的主动读取在
+#      本机不生效，只有方向再变一次才转（2026-09-27 实测，见 tablet-mode）。
+#    PC 模式固定横屏，服务被 ConditionPathExists 挡住起不来，所以按钮只提示。
 #
 #  ■ 翻页键
 #    标记文件在 $XDG_RUNTIME_DIR 下，mykeys.lua 的音量键 bind 每次按下时查它：
@@ -48,8 +52,10 @@ audio_playing() { pactl list sink-inputs 2>/dev/null | grep -q 'Corked: no'; }
 
 case "${1:-}" in
     rotate-lock)
-        if rotate_locked; then
-            systemctl --user start "$ROT_UNIT"
+        if [ ! -f "$TABLET_FLAG" ]; then
+            say "PC 模式固定横屏" "自动旋转只在平板模式下工作"
+        elif rotate_locked; then
+            /usr/local/bin/tablet-mode on >/dev/null 2>&1
             say "自动旋转：开"
         else
             systemctl --user stop "$ROT_UNIT"
@@ -76,7 +82,8 @@ case "${1:-}" in
         noctalia msg dpms-off >/dev/null 2>&1
         ;;
     status)
-        echo "旋转:   $(rotate_locked && echo 已锁定 || echo 自动)"
+        if [ ! -f "$TABLET_FLAG" ]; then echo "旋转:   PC 模式固定横屏"
+        else echo "旋转:   $(rotate_locked && echo 已锁定 || echo 自动)"; fi
         echo "侧边键: $([ -f "$PAGE_FLAG" ] && echo 翻页 || echo 音量)"
         echo "声音:   $(audio_playing && echo 在放 || echo 没有)"
         ;;

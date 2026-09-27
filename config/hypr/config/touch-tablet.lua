@@ -23,6 +23,26 @@
 --     ITrackpadGesture（触控板），两个独立事件源。
 -- ============================================================================
 
+-- ── 0. 模式标识：橙色窗口边框 ─────────────────────────────────────────────
+--
+--    顶栏做不了随模式变化的图标（noctalia v5 的 custom_button 图标/文字是静态的，
+--    动态标签是 v4 的功能，v5 没有；见 noctalia issue #4570）。
+--    边框写在这里而不是另起一套判断：本文件【只在】平板模式下加载，所以边框
+--    颜色和手势集来自同一个开关，不可能对不上。回 PC 模式 reload 时
+--    decorations.lua 的默认绿色边框自然恢复。
+--    ★ 放在 hyprgrass 检查之前：插件没加载时手势没了，但模式标识照样要有。
+hl.config({
+    general = {
+        border_size = 3,
+        col = {
+            active_border = {
+                colors = { "rgba(ffa94dff)", "rgba(f76707ff)" },
+                angle = 45,
+            },
+        },
+    },
+})
+
 if hl.plugin.hyprgrass == nil then
     return
 end

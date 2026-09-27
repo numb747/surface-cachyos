@@ -23,6 +23,11 @@ Documentation=https://github.com/zedd3v/iio-hyprland
 After=graphical-session.target
 Wants=iio-sensor-proxy.service
 PartOf=graphical-session.target
+# 只在平板模式下转。PC 模式 = 接着 Type Cover，物理上只能横着用，基线就是
+# 横屏（monitors.lua 的 BASE_TRANSFORM）。条件挡的是【所有】启动来源：
+# graphical-session.target、autostart.lua、顶栏旋转锁按钮 —— 不用每处各判一次。
+# %S = ~/.local/state，与 tablet/tablet-mode 的 STATE_DIR 一致。
+ConditionPathExists=%S/surface-config/tablet.flag
 
 [Service]
 Type=simple

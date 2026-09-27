@@ -103,18 +103,10 @@ hl.plugin.hyprgrass.bind {
 }
 
 -- ── 平板模式手势集（条件加载）──────────────────────────────────────────────
--- 标记文件存在才 require 平板专属手势。
---
--- ★ 为什么用文件判断而不是读配置项：
---   实测 `hyprctl keyword` 对 Lua 配置不可用（"keyword can't work with
---   non-legacy parsers. Use eval."），也没有通用的变量读写 API。
---   而 io 在配置加载时【确实可用】—— 实测让配置写文件，文件真的出现了。
---   所以标记文件是唯一可靠的状态传递方式。
+-- 平板模式才 require 平板专属手势。TABLET_MODE 由 variables.lua 从标记文件
+-- 读出（为什么用文件判断见那边）。
 --
 -- 切换用 ~/.local/bin/tablet-mode {on|off|toggle}，它改标记后调 hyprctl reload。
-local tabletFlag = os.getenv("HOME") .. "/.local/state/surface-config/tablet.flag"
-local fh = io.open(tabletFlag, "r")
-if fh then
-    fh:close()
+if TABLET_MODE then
     require("config.touch-tablet")
 end

@@ -38,6 +38,7 @@ COVER_VID="${SURFACE_COVER_VID:-045e}"
 COVER_PID="${SURFACE_COVER_PID:-09c0}"
 
 info() { printf '  %s\n' "$*"; }
+say()  { notify-send -a surface -t 2500 "$1" "${2:-}" >/dev/null 2>&1 || true; }
 
 is_tablet() { [ -f "$FLAG" ]; }
 
@@ -63,29 +64,98 @@ hypr_up() {
     command -v hyprctl >/dev/null 2>&1 && hyprctl version >/dev/null 2>&1
 }
 
+# ── 屏幕方向 ────────────────────────────────────────────────────────────────
+# PC 模式固定横屏、不自动旋转；平板模式自动旋转。
+#
+# ★ 为什么要在这里管方向：切模式靠 hyprctl reload，reload 会把方向打回
+#   monitors.lua 的基线（PC 0 / 平板 3）。iio-hyprland 只在方向【变化】时转，
+#   平板放着不动就停在基线上。它源码里虽有启动时主动读一次的 init_orientation，
+#   但在本机上不生效（2026-09-27 实测：人为设成竖屏后重启它 3 次、前台跑 1 次，
+#   都没转回来，也没有任何输出）。所以进平板模式后由这里读传感器、自己转过去；
+#   之后的变化照常由 iio-hyprland 的监听处理。
+ROT_UNIT="iio-hyprland.service"
+MONITOR="eDP-1"
+
+# 传感器当前朝向 → Hyprland transform，映射与 iio-hyprland 一致：
+#   normal 0 / left-up 1 / bottom-up 2 / right-up 3
+# 直接读 D-Bus 属性。刚被占用时可能是 undefined，每 0.2 秒重读，最多 2 秒。
+# ★ 不用 monitor-sensor：它的输出时有时无（同一天里一次打出朝向、之后几次
+#   只打到 "iio-sensor-proxy appeared" 就没下文），解析它不可靠。
+sensor_transform() {
+    local o i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        o=$(busctl --system get-property net.hadess.SensorProxy /net/hadess/SensorProxy \
+                net.hadess.SensorProxy AccelerometerOrientation 2>/dev/null)
+        case "$o" in
+            *'"normal"')    echo 0; return 0 ;;
+            *'"left-up"')   echo 1; return 0 ;;
+            *'"bottom-up"') echo 2; return 0 ;;
+            *'"right-up"')  echo 3; return 0 ;;
+        esac
+        sleep 0.2
+    done
+    return 1
+}
+
+# 屏幕、触摸、手写笔三个 transform 必须一起改，不一致时触屏会点偏或点不动
+# （monitors.lua 的历史坑）。
+# ★ 熄屏（DPMS off）时屏幕的 transform 延后到亮屏才生效，触摸的立即生效。
+#   所以熄屏期间 hyprctl 查到"屏幕 3 / 触摸 0"是正常的，亮屏就一致
+#   （2026-09-27 实测，排查时被它误导过一轮）。
+set_transform() {
+    local t="$1"
+    hyprctl eval "hl.monitor({ output = '$MONITOR', transform = $t }) hl.config({ input = { touchdevice = { transform = $t }, tablet = { transform = $t } } })" >/dev/null 2>&1
+}
+
 apply() {
     local want="$1"          # on / off
     local changed=0
 
     mkdir -p "$STATE_DIR"
 
+    # ★ 先改标记再动旋转服务：iio-hyprland.service 带
+    #   ConditionPathExists=标记文件，这样和 autostart 里的并发 start 怎么交错
+    #   都不会让它在 PC 模式下跑起来。
     if [ "$want" = "on" ]; then
         if ! is_tablet; then : > "$FLAG"; changed=1; fi
     else
         if is_tablet; then rm -f "$FLAG"; changed=1; fi
+        # 幂等；reload 之前停，免得它在 reload 之后又把屏幕转走
+        systemctl --user stop "$ROT_UNIT" >/dev/null 2>&1
     fi
 
-    # 只有在状态真的变了、且 Hyprland 在跑时才 reload，避免无谓重载
-    if [ "$changed" = "1" ] && hypr_up; then
-        hyprctl reload >/dev/null 2>&1
-        # 回 PC 模式时收起虚拟键盘。之后 wvkbd-toggle 自己看标记文件，
-        # PC 模式下不会再弹出来。
-        [ "$want" = "off" ] && /usr/local/bin/wvkbd-toggle hide >/dev/null 2>&1
-        info "已切到$( [ "$want" = "on" ] && echo 平板 || echo PC )模式（配置已重载）"
-    elif [ "$changed" = "0" ]; then
-        info "已经是$( [ "$want" = "on" ] && echo 平板 || echo PC )模式，无需变动"
+    if ! hypr_up; then
+        [ "$changed" = "1" ] && info "状态已记为$( [ "$want" = "on" ] && echo 平板 || echo PC )模式（Hyprland 未运行，下次启动生效）"
+        [ "$changed" = "0" ] && info "已经是$( [ "$want" = "on" ] && echo 平板 || echo PC )模式，无需变动"
+        return 0
+    fi
+
+    # 只有在状态真的变了时才 reload，避免无谓重载
+    [ "$changed" = "1" ] && hyprctl reload >/dev/null 2>&1
+
+    if [ "$want" = "on" ]; then
+        # 先起旋转服务：它占用加速度计，传感器才在读数。
+        # 状态没变也要转：开机时模式本来就对（没有 reload），但方向停在基线上。
+        systemctl --user start "$ROT_UNIT" >/dev/null 2>&1
+        local t
+        t=$(sensor_transform) && set_transform "$t"
     else
-        info "状态已记为$( [ "$want" = "on" ] && echo 平板 || echo PC )模式（Hyprland 未运行，下次启动生效）"
+        # PC 模式横屏由 reload 读到的基线负责。收起虚拟键盘：之后 wvkbd-toggle
+        # 自己看标记文件，PC 模式下不会再弹出来。
+        [ "$changed" = "1" ] && /usr/local/bin/wvkbd-toggle hide >/dev/null 2>&1
+    fi
+
+    if [ "$changed" = "1" ]; then
+        info "已切到$( [ "$want" = "on" ] && echo 平板 || echo PC )模式（配置已重载）"
+        # 屏幕上的提示：插拔、ALT+M、五指长按都走这里，所以每种切法都有反馈。
+        # 只在真的切了时弹，开机时模式本来就对不打扰。
+        if [ "$want" = "on" ]; then
+            say "平板模式" "手势 + 虚拟键盘 · 自动旋转 · 橙色边框"
+        else
+            say "PC 模式" "键盘操作 · 固定横屏"
+        fi
+    else
+        info "已经是$( [ "$want" = "on" ] && echo 平板 || echo PC )模式，无需变动"
     fi
 }
 

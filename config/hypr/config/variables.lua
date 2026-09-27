@@ -34,3 +34,16 @@ PRIMARY_MONITOR = MONITOR1
 --   绑满 9 个没有代价（位置不存在时按下即空操作），但平板上够不着，
 --   而且这些键位在触屏上毫无意义。降到 4 减少噪音。
 NUM_WPM = 4
+
+-- ── 平板 / PC 模式 ─────────────────────────────────────────────────────────
+-- tablet/tablet-mode 维护的标记文件，存在 = 平板模式。在这里读一次，
+-- monitors.lua（屏幕方向）和 touch.lua（平板手势集）都看这个变量。
+-- 切模式 = 改标记 + hyprctl reload，所以每次 reload 都会重新读到。
+--
+-- ★ 为什么用文件而不是配置项：`hyprctl keyword` 对 Lua 配置不可用，也没有
+--   通用的变量读写 API；而 io 在配置加载时可用。见 docs/06 第三节。
+do
+    local fh = io.open(os.getenv("HOME") .. "/.local/state/surface-config/tablet.flag", "r")
+    TABLET_MODE = fh ~= nil
+    if fh then fh:close() end
+end

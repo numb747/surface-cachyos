@@ -202,8 +202,32 @@ head_ "自动旋转"
 check "iio-hyprland.service 已装" test -f "$HOME/.config/systemd/user/iio-hyprland.service"
 if systemctl --user is-enabled iio-hyprland.service >/dev/null 2>&1; then
     ok "iio-hyprland.service 已启用"
-    systemctl --user is-active iio-hyprland.service >/dev/null 2>&1 \
-        && ok "  └ 正在运行" || bad "  └ 已启用但没在跑（开机偶发不旋转就是这个）"
+    # 只在平板模式下转（unit 里 ConditionPathExists=标记文件）。
+    # PC 模式固定横屏：服务不该在跑，屏幕应是 transform 0。
+    rot_active=$(systemctl --user is-active iio-hyprland.service 2>/dev/null)
+    transform=$(hyprctl monitors 2>/dev/null | awk '/transform:/ {print $2; exit}')
+    if [ -f "$FLAG" ]; then
+        if [ "$rot_active" = "active" ]; then
+            ok "  └ 正在运行（平板模式）"
+        elif [ "$(systemctl --user show -p Result --value iio-hyprland.service)" = "success" ]; then
+            # 正常停掉 = 顶栏 ⟳ 锁的，不是崩溃
+            warn "  └ 旋转已锁定（顶栏 ⟳ 点一下解锁）"
+        else
+            bad "  └ 平板模式下没在跑，而且不是被正常停掉的（开机偶发不旋转就是这个）"
+        fi
+    else
+        [ "$rot_active" = "active" ] \
+            && bad "  └ PC 模式下却在跑 → 会把屏幕转成竖屏；看 unit 里的 ConditionPathExists" \
+            || ok "  └ PC 模式：停用（固定横屏）"
+        # 熄屏时 transform 的变更延后到亮屏才生效，查到的值不作数
+        if [ "$(hyprctl monitors -j 2>/dev/null | jq -r '.[0].dpmsStatus')" = "false" ]; then
+            inf "  └ 屏幕熄着，方向亮屏后再查"
+        elif [ "$transform" = "0" ]; then
+            ok "  └ 屏幕是横屏"
+        else
+            bad "  └ PC 模式下屏幕 transform = ${transform:-?}，应为 0 → hyprctl reload（PC 模式的基线就是横屏）"
+        fi
+    fi
 else
     warn "iio-hyprland.service 未启用 → systemctl --user enable --now iio-hyprland.service"
 fi
