@@ -9,8 +9,7 @@
 --  删掉的部分（想恢复就从 ~/cachyOS-config/config/hypr/mykeys.lua 抄）：
 --    §1b  双平面骨架（rack）          —— 抽屉架导航，纯键盘操作
 --         （ALT+S / ALT+[/] / CTRL+1-4 以单格抽屉的简化形式恢复在本文件 §8）
---    §2   CTRL+ALT+HJKL 焦点导航和弦
---    §5   分屏终端（ALT+\）            —— 平板不这么用
+--    §5  分屏终端（ALT+\）            —— 平板不这么用
 --    §6   鼠标指针管理                 —— 触屏无常驻指针，不变式不成立
 --    §10  抽屉架（rack）实现体         —— 同 §1b
 --    §11  Caps Lock 当 Esc             —— 纯物理键盘需求
@@ -306,3 +305,51 @@ hl.bind("ALT + SHIFT + S", function()
     end
     hl.dispatch(oskHide)
 end)
+
+
+-- ────────────────────────────────────────────────────────────────────────────
+--  9. 窗口焦点切换：CTRL + ALT + H / J / K / L（PC 版 §2，接着 Type Cover 时用）
+--
+--     CTRL + ALT + H/J/K/L          焦点移到左 / 下 / 上 / 右边的窗口
+--     CTRL + ALT + SHIFT + H/J/K/L  把当前窗口本身挪过去
+--
+--     全屏／最大化时，原生的方向切焦点会失灵（整块屏幕只有一个窗口，"左边"
+--     无从谈起）。这里先摘掉全屏、让方向判断落在真实的平铺布局上，切完再把
+--     同样的全屏级别还给新的活动窗口 —— 方向和模式都保住。平板上窗口多半
+--     是全屏开的，这一步比 PC 上更要紧。
+--
+--     w.fullscreen：0 = 普通  1 = 最大化  2 = 真全屏
+--     用 fullscreen_state{internal=,client=} 而不是 fullscreen{mode=}：前者是
+--     幂等赋值，后者是 toggle（编号还不一致，容易写反）。
+--
+--     不用原生的 binds.movefocus_cycles_fullscreen：那是「循环」不是「方向」，
+--     H 和 L 会变成上一个 / 下一个。
+--
+--     平板上用虚拟键盘也能按（点 Ctr、点 Alt、再点字母），所以之后同样收键盘，
+--     理由同 §6。binds.lua 里没有 CTRL+ALT+字母，不用 unbind。
+-- ────────────────────────────────────────────────────────────────────────────
+local function focusDir(dir)
+    return function()
+        local w  = hl.get_active_window()
+        local fs = (w and w.fullscreen) or 0
+
+        if fs ~= 0 then
+            hl.dispatch(hl.dsp.window.fullscreen_state({ internal = 0, client = 0 }))
+        end
+        hl.dispatch(hl.dsp.focus({ direction = dir }))
+        if fs ~= 0 then
+            hl.dispatch(hl.dsp.window.fullscreen_state({ internal = fs, client = fs }))
+        end
+        hl.dispatch(oskHide)
+    end
+end
+
+hl.bind("CONTROL + ALT + H", focusDir("left"))
+hl.bind("CONTROL + ALT + J", focusDir("down"))
+hl.bind("CONTROL + ALT + K", focusDir("up"))
+hl.bind("CONTROL + ALT + L", focusDir("right"))
+
+hl.bind("CONTROL + ALT + SHIFT + H", thenHideOsk(hl.dsp.window.move({ direction = "l" })))
+hl.bind("CONTROL + ALT + SHIFT + J", thenHideOsk(hl.dsp.window.move({ direction = "d" })))
+hl.bind("CONTROL + ALT + SHIFT + K", thenHideOsk(hl.dsp.window.move({ direction = "u" })))
+hl.bind("CONTROL + ALT + SHIFT + L", thenHideOsk(hl.dsp.window.move({ direction = "r" })))
