@@ -216,6 +216,12 @@ mod_system() {
 
   5) hyprgrass 插件
        ~/surface-cachyos/setup/02-hyprgrass.sh               # ★ 必须手敲，见该脚本头部
+
+  6) 开机自动登录（摘掉 Type Cover 时登录界面没有虚拟键盘，见 docs/03）
+       sudo cp -a /etc/greetd/config.toml /etc/greetd/config.toml.bak-$(date +%Y%m%d-%H%M%S)
+       sed "s/@USER@/$USER/" ~/surface-cachyos/setup/greetd/config.toml \
+           | sudo tee /etc/greetd/config.toml >/dev/null
+     下次开机生效，不用重启 greetd（重启它会立刻结束当前桌面会话）。
 EOS
 }
 

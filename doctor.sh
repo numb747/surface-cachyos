@@ -138,6 +138,15 @@ fi
 
 check "忽略原始触屏的 udev 规则已装" test -f /etc/udev/rules.d/71-surface-ipts-ignore-raw.rules
 
+# 开机自动登录（登录界面没有虚拟键盘，见 docs/03）。没装只是警告：接着 Type Cover 能输密码。
+if sed "s/@USER@/$USER/" "$SRC/setup/greetd/config.toml" | cmp -s - /etc/greetd/config.toml; then
+    ok "greetd 开机自动登录已装"
+elif grep -q '^\[initial_session\]' /etc/greetd/config.toml 2>/dev/null; then
+    warn "greetd 有自动登录，但与 setup/greetd/config.toml 不一致"
+else
+    warn "greetd 没配自动登录 → 摘掉 Type Cover 开机时输不了密码（./install.sh system 第 6 条）"
+fi
+
 # 打过"粘滞极大值"补丁的 iptsd（修单指划动断触，见 docs/08、setup/03）。
 # 没装只是警告：系统包原版照样能用，只是划动会断。
 # ★ 看的是【正在跑的进程】的命令行，不是 drop-in 在不在 —— drop-in 装了

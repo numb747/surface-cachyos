@@ -1,0 +1,34 @@
+# greetd —— 开机自动登录（Surface 平板）
+#
+# 装法（要 sudo，见 ./install.sh system）：
+#     sed "s/@USER@/$USER/" ~/surface-cachyos/setup/greetd/config.toml \
+#         | sudo tee /etc/greetd/config.toml >/dev/null
+#   （@USER@ 是占位符：包内不写死用户名）
+#
+# ■ 为什么要自动登录
+#   摘掉 Type Cover 开机时，登录界面没有虚拟键盘，密码输不进去。
+#   noctalia-greeter 自带的 wlroots 合成器只提供 compositor / xdg-shell / seat，
+#   没有 layer-shell 和 virtual-keyboard，wvkbd 在那里建不出窗口（docs/03）。
+#
+# ■ 代价
+#   开机不要密码，拿到机器的人能直接进桌面。手动锁屏仍要密码。
+#
+# ■ initial_session 只在【本次开机第一次】启动 greetd 时生效（靠 /run/greetd.run
+#   判断）。注销或 Hyprland 崩溃后回到下面的 default_session，即原来的
+#   noctalia-greeter，要输密码 —— 不会陷入自动登录循环。
+#
+# ■ command 与 /usr/share/wayland-sessions/hyprland-uwsm.desktop 的 Exec 相同，
+#   即原来从登录界面选的那个会话。
+#
+# ■ 回滚：删掉 [initial_session] 段即可；原文件备份在 /etc/greetd/config.toml.bak-*
+
+[terminal]
+vt = 1
+
+[default_session]
+command = "/usr/bin/noctalia-greeter-session"
+user = "greeter"
+
+[initial_session]
+command = "uwsm start -e -D Hyprland hyprland.desktop"
+user = "@USER@"
