@@ -7,7 +7,7 @@
 #      tablet-mode off         回 PC 模式
 #      tablet-mode toggle      切换
 #      tablet-mode status      看当前模式
-#      tablet-mode auto        按 Type Cover 在不在自动判定（udev 用这个）
+#      tablet-mode auto        按 Type Cover 在不在自动判定（Cover 插拔、开机时用这个）
 #
 #  原理：
 #      维护一个标记文件 ~/.local/state/surface-config/tablet.flag。
@@ -58,7 +58,7 @@ cover_path() {
 
 cover_present() { cover_path >/dev/null 2>&1; }
 
-# 有没有真的 Hyprland 实例（udev 触发时可能还没有）
+# 有没有真的 Hyprland 实例（开机时 Cover 事件可能早于 Hyprland）
 hypr_up() {
     command -v hyprctl >/dev/null 2>&1 && hyprctl version >/dev/null 2>&1
 }
@@ -107,8 +107,8 @@ case "${1:-status}" in
         fi
         ;;
     auto)
-        # udev 触发用。注意可能由 add/remove 两个事件先后触发，
-        # 所以每次都重新读设备状态，不依赖事件类型。
+        # surface-typecover.service 的 ExecStart/ExecStop 和开机自启调它。
+        # 可能被连续触发、先后乱序，所以每次都重新读设备状态，不依赖事件类型。
         if cover_present; then apply off; else apply on; fi
         ;;
     -h|--help)

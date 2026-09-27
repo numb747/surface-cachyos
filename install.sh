@@ -128,10 +128,12 @@ mod_tablet() {
     head_ "tablet — 平板模式开关与救援键"
     put_module tablet
 
-    # udev 的 RUN 以 root 跑、环境最小，用不了 ~，所以 /usr/local/bin 里
-    # 必须有一份【真文件】（不是软链）。install.sh 只写 $HOME，这一步要 sudo，
-    # 所以只打印命令。
+    # Hyprland / noctalia 的 PATH 里没有 ~/.local/bin，Lua 里调的是
+    # /usr/local/bin 那份。install.sh 只写 $HOME，这一步要 sudo，所以只打印命令。
     cat <<'EOS'
+
+  ★ 让用户管理器认出 surface-typecover.service（不用 enable，udev 拉起它）：
+      systemctl --user daemon-reload
 
   ★ 下面这条要 sudo，请自己跑（install.sh 不代跑）：
       sudo install -m755 ~/.local/bin/tablet-mode   /usr/local/bin/tablet-mode
@@ -196,8 +198,10 @@ mod_system() {
        sudo install -m644 ~/surface-cachyos/udev/71-surface-ipts-ignore-raw.rules /etc/udev/rules.d/
        sudo udevadm control --reload-rules
        sudo udevadm trigger --subsystem-match=input
+       sudo udevadm trigger --action=add --attr-match=idVendor=045e --attr-match=idProduct=09c0
      ★ trigger 默认是 --action=change，匹配不到 71 里的 ACTION=="add|change"
-       之外的部分；触屏相关用上面这条即可。
+       之外的部分；触屏相关用第一条即可。第二条让已接着的 Type Cover
+       马上交给 systemd（不然要拔插一次，自动切换才开始工作）。
 
   2) iptsd 自愈（上游 Restart=no + 3.1.0 的 EINTR 缺陷会让触屏整个消失）
        sudo install -Dm644 ~/surface-cachyos/systemd/iptsd@.service.d/override.conf \
@@ -208,7 +212,7 @@ mod_system() {
   2b) iptsd 补丁版（修单指划动断触；先编译，编完它会打印安装命令）
        ~/surface-cachyos/setup/03-iptsd-patched.sh           # 不需要 sudo
 
-  3) /usr/local/bin 的两份真文件（udev 的 RUN 要用，见 tablet 模块）
+  3) /usr/local/bin 的副本（Hyprland / noctalia 的 PATH 里没有 ~/.local/bin）
        sudo install -m755 ~/.local/bin/tablet-mode   /usr/local/bin/tablet-mode
        sudo install -m755 ~/.local/bin/tablet-rescue /usr/local/bin/tablet-rescue
        sudo ln -sf ~/.local/bin/surface-ctl /usr/local/bin/surface-ctl   # 顶栏按钮用，软链即可

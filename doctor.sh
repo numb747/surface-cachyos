@@ -136,7 +136,8 @@ if [ -f /etc/systemd/system/iptsd@.service.d/override.conf ]; then
     fi
 fi
 
-check "忽略原始触屏的 udev 规则已装" test -f /etc/udev/rules.d/71-surface-ipts-ignore-raw.rules
+check "忽略原始触屏的 udev 规则与仓库一致" \
+    cmp -s "$SRC/udev/71-surface-ipts-ignore-raw.rules" /etc/udev/rules.d/71-surface-ipts-ignore-raw.rules
 
 # 开机自动登录（登录界面没有虚拟键盘，见 docs/03）。没装只是警告：接着 Type Cover 能输密码。
 if sed "s/@USER@/$USER/" "$SRC/setup/greetd/config.toml" | cmp -s - /etc/greetd/config.toml; then
@@ -219,17 +220,26 @@ else ok "当前是【PC 模式】（无标记文件）"; fi
 
 check "tablet-mode 已装（~/.local/bin）"   test -x "$HOME/.local/bin/tablet-mode"
 check "tablet-rescue 已装（~/.local/bin）" test -x "$HOME/.local/bin/tablet-rescue"
-check "udev 平板模式规则已装" test -f /etc/udev/rules.d/70-surface-tablet-mode.rules
+# ★ 比对内容。只查存在性时，旧版 RUN+="systemd-run --user" 那条规则 3 天里
+#   失败 15 次、一次都没切成功，doctor 照样报绿。
+if cmp -s "$SRC/udev/70-surface-tablet-mode.rules" /etc/udev/rules.d/70-surface-tablet-mode.rules; then
+    ok "udev 平板模式规则与仓库一致"
+else
+    bad "udev 平板模式规则没装或是旧版 → Type Cover 插拔不会自动切模式"
+    inf "  修：sudo install -m644 $SRC/udev/70-surface-tablet-mode.rules /etc/udev/rules.d/"
+    inf "      sudo udevadm control --reload-rules"
+    inf "      sudo udevadm trigger --action=add --attr-match=idVendor=045e --attr-match=idProduct=09c0"
+fi
 
-# ★ udev 的 RUN 用 /usr/local/bin 那个路径。它可以是软链（root 能穿透），
-#   但必须【能执行】—— 旧仓这里只查存在性，结果装了份旧文件也报绿。
+# ★ Hyprland 的 Lua 调的是 /usr/local/bin 那个路径（它的 PATH 里没有 ~/.local/bin）。
+#   可以是软链，但必须【能执行】—— 旧仓这里只查存在性，结果装了份旧文件也报绿。
 for b in tablet-mode tablet-rescue; do
     if [ -x "/usr/local/bin/$b" ]; then
         src="$(readlink -f "/usr/local/bin/$b")"
         if cmp -s "$HOME/.local/bin/$b" "$src"; then ok "/usr/local/bin/$b（udev 用的那份）与仓库一致"
         else bad "/usr/local/bin/$b 指向的 $src 与 ~/.local/bin/$b 不一致 → 重跑 install.sh tablet，再按提示 sudo install"; fi
     else
-        bad "/usr/local/bin/$b 不可执行 → udev 调不到它，Type Cover 自动切换会失效"
+        bad "/usr/local/bin/$b 不可执行 → 手势和 ALT+M 调不到它"
         inf "  修：sudo install -m755 ~/.local/bin/$b /usr/local/bin/$b"
     fi
 done
@@ -259,6 +269,26 @@ for d in /sys/bus/usb/devices/*/; do
 done
 if [ -n "$cover" ]; then inf "Type Cover 已接上（$cover）"
 else inf "Type Cover 没接（纯平板形态）"; fi
+
+# 自动切换链路是否真的通：Cover 接着时 udev 应该已经把它交给 systemd，
+# 并拉起了 surface-typecover.service。规则装对了但这里不通，说明链路断在
+# udev → systemd 之间（比如装完规则没 trigger，要拔插一次）。
+if [ -n "$cover" ]; then
+    if [ "$(systemctl --user is-active surface-typecover.service 2>/dev/null)" = "active" ]; then
+        ok "surface-typecover.service 在跑（插拔会自动切模式）"
+    else
+        bad "Type Cover 接着，但 surface-typecover.service 没被拉起 → 插拔不会自动切模式"
+        inf "  看：systemctl --user status dev-typecover.device surface-typecover.service"
+    fi
+fi
+
+# 模式与 Cover 对不上：可能是手动 ALT+M 切的（正常），也可能是自动切换没工作。
+# 只警告，不算失败。
+if [ -n "$cover" ] && [ -f "$FLAG" ]; then
+    warn "Type Cover 接着，但处于平板模式（手动切的就没事）"
+elif [ -z "$cover" ] && [ ! -f "$FLAG" ]; then
+    warn "Type Cover 没接，但处于 PC 模式（手动切的就没事）"
+fi
 
 # ── 6. 虚拟键盘 ─────────────────────────────────────────────────────────────
 head_ "虚拟键盘"

@@ -35,8 +35,8 @@ bin/hypr-screenrec                        ~/.local/bin/hypr-screenrec
 # 平板/PC 模式开关与救援键。
 #
 # ★ 装到 ~/.local/bin（$HOME 内，install.sh 能直接写），再由 system 模块
-#   打印一条 sudo 命令复制到 /usr/local/bin —— udev 的 RUN 以 root 跑、
-#   环境最小，用不了 ~，所以那里必须有一份真文件。
+#   打印一条 sudo 命令复制到 /usr/local/bin —— Hyprland 和 noctalia 的
+#   PATH 里没有 ~/.local/bin（CLAUDE.md 硬约束 3），Lua 里写的是那个路径。
 #
 #   为什么不直接把 /usr/local/bin 写进这张表：本仓的性质是"install.sh
 #   只写 $HOME"，表里放一个要 sudo 的路径会让这条性质破功（旧仓这么干过）。
@@ -53,6 +53,10 @@ docs/cheatsheet.html                      ~/.local/share/surface-cachyos/cheatsh
 tablet/surface-ctl                        ~/.local/bin/surface-ctl
 # 触屏地图：划一划就标出这块屏幕哪里断触，Firefox 收藏这个路径。
 docs/touchmap.html                        ~/.local/share/surface-cachyos/touchmap.html
+# Type Cover 插拔 → tablet-mode auto。由 udev 的 SYSTEMD_USER_WANTS 拉起，
+# 不用 enable。见 udev/70-surface-tablet-mode.rules 头部：旧版从 udev 的 RUN
+# 里以 root 调 `systemd-run --user`，从来没成功过。
+systemd/surface-typecover.service         ~/.config/systemd/user/surface-typecover.service
 
 #@module osk
 # 虚拟键盘的信号封装。wvkbd 用 SIGUSR1/2/SIGRTMIN 控制显隐，这里包成

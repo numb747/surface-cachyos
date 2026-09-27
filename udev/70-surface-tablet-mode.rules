@@ -5,39 +5,41 @@
 #      sudo install -m644 udev/70-surface-tablet-mode.rules \
 #           /etc/udev/rules.d/70-surface-tablet-mode.rules
 #      sudo udevadm control --reload-rules
+#      sudo udevadm trigger --action=add --attr-match=idVendor=045e --attr-match=idProduct=09c0
 #
 #  验证：
-#      udevadm test /sys/bus/usb/devices/1-7     # 看规则有没有命中
-#      udevadm monitor --kernel --subsystem-match=usb | grep -i cover
+#      systemctl --user status dev-typecover.device surface-typecover.service
+#
+#  ■ 本规则【不跑任何命令】，只把 Cover 交给 systemd
+#      早先这里是 RUN+="systemd-run --user ... tablet-mode auto"。
+#      那条【从来没成功过】（2026-09-27 查日志，3 天 15 次全部 exit 1）：
+#      RUN 以 root 跑，`systemd-run --user` 连的是 root 自己的用户管理器，
+#      而 root 没有登录会话、没有那个管理器。就算连上了，$HOME 也是 /root，
+#      标记文件会写错地方。doctor 只查规则文件在不在，所以一直报绿。
+#
+#      现在的链路：
+#        udev 打 systemd 标签 + 别名 /dev/typecover
+#          → 每个用户管理器里出现 dev-typecover.device
+#          → SYSTEMD_USER_WANTS 拉起用户单元 surface-typecover.service
+#            （systemd/surface-typecover.service，跑在【用户自己】的会话里）
+#        拔掉 → 设备单元消失 → 该单元 BindsTo 它，被停掉 → ExecStop 再判一次
+#
+#  ■ ACTION!="remove" 而不是 ACTION=="add"
+#      USB 设备 add 之后紧跟一个 bind 事件。systemd 以【最近一次事件】的标签
+#      为准：bind 事件没带 systemd 标签，设备单元就会被当成拔掉了。
 #
 #  ■ 为什么匹配 idVendor/idProduct 而不是端口号
-#      早先写的是 KERNEL=="1-7"（USB 端口号）。那个值换机型、换 Cover、
-#      甚至换 USB 拓扑都会变，很脆。改成按设备 ID 匹配：
-#          045e = Microsoft
-#          09c0 = Surface Type Cover
-#      查法：cat /sys/bus/usb/devices/*/idVendor 对应 product 看
+#      早先写的是 KERNEL=="1-7"（USB 端口号），换机型、换 Cover、换 USB 拓扑
+#      都会变。按设备 ID 匹配：045e = Microsoft，09c0 = Surface Type Cover。
+#      tablet/tablet-mode 里用的是同一对值。
 #
-#  ■ 为什么用 systemd-run --no-block
-#      udev 的 RUN 是同步的，会阻塞设备事件处理。而 tablet-mode 里要跑
-#      hyprctl reload，那可能耗时几百毫秒。加 --no-block 让 udev 不等待。
-#
-#  ■ 为什么脚本路径是 /usr/local/bin 而不是 ~/.local/bin
-#      udev 的 RUN 以 root 跑、环境最小，用不了 ~。
-#      所以 install.sh 会把 bin/tablet-mode 另装一份到 /usr/local/bin。
-#      那个目录同时在 Hyprland 的 PATH 里 —— 见 docs/07。
+#  ■ 开机那一次不归这里管
+#      开机时 Cover 若本来就没接，没有任何设备事件。改由 Hyprland 启动时跑
+#      一次 tablet-mode auto（config/hypr/config/autostart.lua）。
 # ============================================================================
 
-# Type Cover 接上 → 有物理键盘了 → PC 模式
-ACTION=="add", SUBSYSTEM=="usb", \
-    ATTRS{idVendor}=="045e", ATTRS{idProduct}=="09c0", \
-    RUN+="/usr/bin/systemd-run --no-block --user --collect --unit=tablet-mode-cover-add /usr/local/bin/tablet-mode auto"
-
-# Type Cover 摘下 → 只剩触屏 → 平板模式
-ACTION=="remove", SUBSYSTEM=="usb", \
-    ATTRS{idVendor}=="045e", ATTRS{idProduct}=="09c0", \
-    RUN+="/usr/bin/systemd-run --no-block --user --collect --unit=tablet-mode-cover-del /usr/local/bin/tablet-mode auto"
-
-# 开机时按当前状态定一次。
-# udev 的 add 事件在启动早期可能早于 Hyprland 起来 —— 那次 tablet-mode 会因为
-# Hyprland 未运行而只写标记文件、不 reload。这正是想要的：
-# 标记先落盘，Hyprland 起来读配置时就看到正确模式了。
+ACTION!="remove", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", \
+    ATTR{idVendor}=="045e", ATTR{idProduct}=="09c0", \
+    TAG+="systemd", \
+    ENV{SYSTEMD_ALIAS}+="/dev/typecover", \
+    ENV{SYSTEMD_USER_WANTS}+="surface-typecover.service"

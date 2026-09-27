@@ -98,6 +98,7 @@ cat <<'EOS'
 
   2) 用户级服务的启用状态：
        systemctl --user disable --now iio-hyprland.service ocrd.socket
+       systemctl --user stop surface-typecover.service
 
   3) 运行时状态：
        rm -f ~/.local/state/surface-config/tablet.flag

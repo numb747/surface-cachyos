@@ -18,4 +18,8 @@ hl.on("hyprland.start", function ()
     -- 见 docs/05-自动旋转.md。
     hl.exec_cmd("systemctl --user start iio-hyprland.service")
     hl.exec_cmd("xhost +SI:localuser:root")
+    -- 按 Type Cover 在不在定一次模式。插拔由 udev → surface-typecover.service
+    -- 负责，但开机时 Cover 若本来就没接，没有任何设备事件，标记文件会停在
+    -- 上次关机时的状态。模式对的话 tablet-mode 什么都不做，不会多一次 reload。
+    hl.exec_cmd("/usr/local/bin/tablet-mode auto")
 end)

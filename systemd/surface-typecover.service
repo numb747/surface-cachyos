@@ -1,0 +1,26 @@
+# Type Cover 插拔 → 切平板/PC 模式
+#
+# 由 udev 规则（udev/70-surface-tablet-mode.rules）通过 SYSTEMD_USER_WANTS
+# 拉起，不需要 enable（没有 [Install] 段）。
+#
+#   接上 Cover → dev-typecover.device 出现 → 本单元启动 → ExecStart
+#   拔掉 Cover → 设备单元消失 → BindsTo 让本单元停止 → ExecStop
+#
+# 两头跑的都是 `tablet-mode auto`：它每次重新看 Cover 在不在，不管自己是被
+# 哪个事件叫起来的，所以重复触发、先后乱序都不会切错。
+#
+# ★ 为什么是【用户】单元：标记文件在 $HOME 下，hyprctl reload 要
+#   HYPRLAND_INSTANCE_SIGNATURE —— 两样都只在用户自己的管理器里有
+#   （uwsm 会把后者导入用户管理器的环境）。旧版从 udev（root）里调，
+#   两样都拿不到。
+
+[Unit]
+Description=Type Cover 插拔 → 切换平板/PC 模式
+BindsTo=dev-typecover.device
+After=dev-typecover.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=%h/.local/bin/tablet-mode auto
+ExecStop=%h/.local/bin/tablet-mode auto
